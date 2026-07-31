@@ -15,8 +15,8 @@ import {
 
 const navItems = [
   { href: "/app", label: "Dashboard", action: "nav.dashboard", icon: Gauge },
-  { href: "/app/upload", label: "Upload", action: "nav.upload", icon: Upload },
-  { href: "/app/packs", label: "Packs", action: "nav.packs", icon: Archive },
+  { href: "/app/upload", label: "File Upload", action: "nav.upload", icon: Upload },
+  { href: "/app/packs", label: "Blob Packs", action: "nav.packs", icon: Archive },
   {
     href: "/app/recovery",
     label: "Recovery",
@@ -72,14 +72,14 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
           <nav className="mt-auto border-t border-border pt-4" aria-label="Secondary">
             <Link
-              href="/app/recovery"
+              href="/app/support"
               className="flex min-h-10 items-center gap-3 rounded-lg px-4 py-2 text-sm font-semibold text-muted transition hover:bg-surface-highest hover:text-foreground"
             >
               <CircleHelp aria-hidden className="h-4 w-4" />
               Support
             </Link>
             <Link
-              href="/app/recovery"
+              href="/app/documentation"
               className="flex min-h-10 items-center gap-3 rounded-lg px-4 py-2 text-sm font-semibold text-muted transition hover:bg-surface-highest hover:text-foreground"
             >
               <FileText aria-hidden className="h-4 w-4" />

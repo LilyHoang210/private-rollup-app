@@ -19,12 +19,12 @@ describe("app shell", () => {
     ).toBe(true);
     expect(
       screen
-        .getAllByRole("link", { name: "Upload" })
+        .getAllByRole("link", { name: "File Upload" })
         .every((link) => link.getAttribute("data-action") === "nav.upload"),
     ).toBe(true);
     expect(
       screen
-        .getAllByRole("link", { name: "Packs" })
+        .getAllByRole("link", { name: "Blob Packs" })
         .every((link) => link.getAttribute("data-action") === "nav.packs"),
     ).toBe(true);
     expect(
@@ -34,6 +34,23 @@ describe("app shell", () => {
     ).toBe(true);
     expect(screen.getByRole("main")).toContainElement(
       screen.getByRole("heading", { name: "Dashboard" }),
+    );
+  });
+
+  it("routes secondary navigation to dedicated pages", () => {
+    render(
+      <AppShell>
+        <h1>Recovery</h1>
+      </AppShell>,
+    );
+
+    expect(screen.getByRole("link", { name: "Support" })).toHaveAttribute(
+      "href",
+      "/app/support",
+    );
+    expect(screen.getByRole("link", { name: "Documentation" })).toHaveAttribute(
+      "href",
+      "/app/documentation",
     );
   });
 });

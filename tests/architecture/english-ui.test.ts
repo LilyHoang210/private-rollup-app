@@ -31,6 +31,13 @@ function sourceFiles(root: string): string[] {
 }
 
 describe("English-only website UI", () => {
+  it("declares English as the document language", () => {
+    const layout = readFileSync(path.join(process.cwd(), "src/app/layout.tsx"), "utf8");
+
+    expect(layout).toContain('lang="en"');
+    expect(layout).not.toContain('lang="vi"');
+  });
+
   it("does not ship Vietnamese UI copy in app, component, feature, or e2e sources", () => {
     const files = uiRoots.flatMap(sourceFiles);
 
