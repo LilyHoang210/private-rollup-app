@@ -1,0 +1,3 @@
+export const CHUNK_FORMAT_MAGIC = "PRCF";
+export const CHUNK_FORMAT_VERSION = 1;
+export const DEFAULT_CHUNK_SIZE_BYTES = 1024 * 1024;

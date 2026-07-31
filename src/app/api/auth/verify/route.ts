@@ -1,0 +1,55 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { authService } from "@/server/auth/runtime";
+import {
+  createSessionCookie,
+  createSessionToken,
+  hashSessionToken,
+} from "@/server/auth/session";
+
+const verifyRequestSchema = z.object({
+  challengeId: z.string().uuid(),
+  walletAddress: z.string().min(1),
+  domain: z.string().min(1),
+  signature: z.string().min(1),
+});
+
+export async function POST(request: Request) {
+  const body = verifyRequestSchema.safeParse(await request.json());
+
+  if (!body.success) {
+    return NextResponse.json(
+      { error: "INVALID_AUTH_VERIFY_REQUEST" },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const verified = await authService.verifyChallenge(body.data);
+    const token = createSessionToken();
+    const response = NextResponse.json({
+      chainId: verified.chainId,
+      walletAddressHash: verified.walletAddressHash,
+      sessionTokenHash: hashSessionToken(token),
+    });
+
+    response.headers.set(
+      "Set-Cookie",
+      createSessionCookie({
+        token,
+        maxAgeSeconds: 7 * 24 * 60 * 60,
+        secure: process.env.NODE_ENV === "production",
+      }),
+    );
+
+    return response;
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error ? error.message : "AUTH_VERIFICATION_FAILED",
+      },
+      { status: 401 },
+    );
+  }
+}
