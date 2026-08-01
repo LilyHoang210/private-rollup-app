@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import { LogOut, Wallet } from "lucide-react";
 import { getAptBalance } from "@/client/aptos/balance";
@@ -44,22 +44,32 @@ export function ConnectedWalletBadge() {
   const [isPanelOpen, setPanelOpen] = useState(false);
   const [pendingWalletName, setPendingWalletName] = useState<string | null>(null);
   const [balanceState, setBalanceState] = useState<BalanceState>({ kind: "idle" });
+  const isMounted = useSyncExternalStore(
+    subscribeToClientReady,
+    getClientReadySnapshot,
+    getServerReadySnapshot,
+  );
   const [hydratedSession, setHydratedSession] = useState<HydratedSession>({
     authenticated: false,
   });
   const authStartedRef = useRef(false);
   const address = account?.address?.toString();
   const displayAddress =
-    address ??
-    (hydratedSession.authenticated ? hydratedSession.walletAddress : undefined);
-  const hasActiveSession = Boolean(displayAddress || connected);
+    isMounted && address
+      ? address
+      : hydratedSession.authenticated
+        ? hydratedSession.walletAddress
+        : undefined;
+  const hasActiveSession = Boolean(displayAddress || (isMounted && connected));
   const extensionWallets = wallets.filter(isExtensionWallet);
   const label = displayAddress
     ? shortAddress(displayAddress)
-    : connected || isLoading
+    : isMounted && (connected || isLoading)
       ? "Wallet connected"
       : "Connect wallet";
-  const canSignInWebSession = Boolean(connected && account && !hydratedSession.authenticated);
+  const canSignInWebSession = Boolean(
+    isMounted && connected && account && !hydratedSession.authenticated,
+  );
 
   useEffect(() => {
     let active = true;
@@ -247,7 +257,9 @@ export function ConnectedWalletBadge() {
         aria-label={displayAddress ? `Connected wallet ${displayAddress}` : label}
         title={displayAddress ?? label}
         onClick={openPanel}
-        disabled={status === "connecting" || status === "logging_out" || isLoading}
+        disabled={
+          !isMounted || status === "connecting" || status === "logging_out" || isLoading
+        }
         className="inline-flex min-h-8 items-center gap-2 rounded border border-border bg-surface-low px-3 py-1 font-mono text-xs text-foreground transition-colors hover:border-primary disabled:cursor-not-allowed disabled:opacity-70"
       >
         <Wallet aria-hidden className="h-4 w-4 text-muted" />
@@ -466,4 +478,16 @@ function balanceLabel(balanceState: BalanceState) {
     case "idle":
       return "Balance unavailable";
   }
+}
+
+function subscribeToClientReady() {
+  return () => undefined;
+}
+
+function getClientReadySnapshot() {
+  return true;
+}
+
+function getServerReadySnapshot() {
+  return false;
 }

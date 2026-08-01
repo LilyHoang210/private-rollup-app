@@ -2,12 +2,34 @@
 import "@testing-library/jest-dom/vitest";
 import { act } from "react";
 import { render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { AptBalancePanel } from "../../src/features/billing/apt-balance-panel";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  AptBalancePanel,
+  buildDepositTransaction,
+  withWalletResponseTimeout,
+} from "../../src/features/billing/apt-balance-panel";
+
+const { signAndSubmitTransactionMock, walletHookMock } = vi.hoisted(() => ({
+  signAndSubmitTransactionMock: vi.fn(),
+  walletHookMock: vi.fn(),
+}));
+
+vi.mock("@aptos-labs/wallet-adapter-react", () => ({
+  useWallet: () => walletHookMock(),
+}));
 
 describe("APT balance panel", () => {
+  beforeEach(() => {
+    walletHookMock.mockReturnValue({
+      connected: false,
+      signAndSubmitTransaction: signAndSubmitTransactionMock,
+    });
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   it("reloads the APT account after a wallet session is authenticated", async () => {
@@ -38,6 +60,81 @@ describe("APT balance panel", () => {
     expect(await screen.findByText("Usable APT balance")).toBeVisible();
     expect(screen.getAllByText("1 APT").length).toBeGreaterThan(0);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("builds an explicit Aptos transfer payload and dapp submitter for wallet deposits", () => {
+    const transaction = buildDepositTransaction({
+      recipientAddress: walletFixture().address,
+      amountOctas: 1_000_000,
+    });
+
+    expect(transaction).toMatchObject({
+      data: {
+        function: "0x1::aptos_account::transfer",
+        typeArguments: [],
+        functionArguments: [walletFixture().address, 1_000_000],
+      },
+    });
+    expect(transaction.transactionSubmitter).toBeDefined();
+  });
+
+  it("times out a wallet deposit when the wallet closes without returning a hash", async () => {
+    await expect(
+      withWalletResponseTimeout(new Promise(() => undefined), 10),
+    ).rejects.toThrow("Wallet did not return a transaction hash");
+  });
+
+  it("submits a wallet transfer and syncs the confirmed APT balance", async () => {
+    walletHookMock.mockReturnValue({
+      connected: true,
+      signAndSubmitTransaction: signAndSubmitTransactionMock.mockResolvedValue({
+        hash: `0x${"1".repeat(64)}`,
+      }),
+    });
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        Response.json({
+          account: {
+            userId: "wallet:user",
+            balanceOctas: 0,
+            reservedOctas: 0,
+            availableOctas: 0,
+            wallet: walletFixture(),
+            ledger: [],
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          account: {
+            userId: "wallet:user",
+            balanceOctas: 1_000_000,
+            reservedOctas: 0,
+            availableOctas: 1_000_000,
+            wallet: { ...walletFixture(), onChainBalanceOctas: 1_000_000 },
+            ledger: [],
+          },
+        }),
+      );
+
+    render(<AptBalancePanel />);
+
+    expect((await screen.findAllByText("0 APT")).length).toBeGreaterThan(0);
+    await userEvent.type(screen.getByLabelText("APT amount to deposit"), "0.01");
+    await userEvent.click(screen.getByRole("button", { name: "Deposit APT" }));
+
+    expect(signAndSubmitTransactionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          function: "0x1::aptos_account::transfer",
+          typeArguments: [],
+          functionArguments: [walletFixture().address, 1_000_000],
+        }),
+        transactionSubmitter: expect.any(Object),
+      }),
+    );
+    expect(await screen.findByText("Deposit confirmed: 0x11111111...11111111")).toBeVisible();
+    expect(screen.getAllByText("0.01 APT").length).toBeGreaterThan(0);
   });
 });
 

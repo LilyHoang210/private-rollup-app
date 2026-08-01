@@ -13,7 +13,12 @@ import {
   WalletCards,
 } from "lucide-react";
 import { parseAptToOctas } from "@/domain/apt";
-import { useWallet } from "@aptos-labs/wallet-adapter-react";
+import { Aptos, AptosConfig, Network, type TransactionSubmitter } from "@aptos-labs/ts-sdk";
+import {
+  useWallet,
+  type AptosSignAndSubmitTransactionOutput,
+  type InputTransactionData,
+} from "@aptos-labs/wallet-adapter-react";
 import {
   formatApt,
   getAptAccount,
@@ -21,6 +26,9 @@ import {
   withdrawAvailableApt,
   type AptAccountResponse,
 } from "@/client/api/apt-account";
+
+const APTOS_TESTNET = new Aptos(new AptosConfig({ network: Network.TESTNET }));
+const WALLET_RESPONSE_TIMEOUT_MS = 45_000;
 
 type AccountState =
   | { kind: "loading" }
@@ -82,12 +90,14 @@ export function AptBalancePanel() {
     try {
       const amountOctas = parseAptToOctas(depositAmount);
       if (amountOctas <= 0) throw new Error("Enter an amount greater than zero");
-      const submitted = await signAndSubmitTransaction({
-        data: {
-          function: "0x1::aptos_account::transfer",
-          functionArguments: [state.account.wallet.address, amountOctas],
-        },
-      });
+      const submitted = await withWalletResponseTimeout(
+        signAndSubmitTransaction(
+          buildDepositTransaction({
+            recipientAddress: state.account.wallet.address,
+            amountOctas,
+          }),
+        ),
+      );
       setNotice(`Deposit submitted: ${shortHash(submitted.hash)}. Syncing on-chain balance...`);
       const account = await waitForDeposit(state.account.balanceOctas);
       setState({ kind: "ready", account });
@@ -298,6 +308,53 @@ function BalanceRow({ icon, label, value }: { icon: ReactNode; label: string; va
     </div>
   );
 }
+
+export function buildDepositTransaction(input: {
+  recipientAddress: string;
+  amountOctas: number;
+}): InputTransactionData {
+  return {
+    data: {
+      function: "0x1::aptos_account::transfer",
+      typeArguments: [],
+      functionArguments: [input.recipientAddress, input.amountOctas],
+    },
+    transactionSubmitter: aptosTestnetSubmitter,
+  };
+}
+
+export async function withWalletResponseTimeout(
+  promise: Promise<AptosSignAndSubmitTransactionOutput>,
+  timeoutMs = WALLET_RESPONSE_TIMEOUT_MS,
+) {
+  let timeoutId: number | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timeoutId = window.setTimeout(() => {
+          reject(
+            new Error(
+              "Wallet did not return a transaction hash. If you approved the transfer, wait a few seconds and click 'I have deposited - sync'. If the balance stays unchanged, reopen your wallet and try again.",
+            ),
+          );
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) window.clearTimeout(timeoutId);
+  }
+}
+
+const aptosTestnetSubmitter: TransactionSubmitter = {
+  async submitTransaction(args) {
+    return APTOS_TESTNET.transaction.submit.simple({
+      transaction: args.transaction,
+      senderAuthenticator: args.senderAuthenticator,
+      feePayerAuthenticator: args.feePayerAuthenticator,
+    });
+  },
+};
 
 function octasToInput(octas: number) {
   return (octas / 100_000_000).toFixed(8).replace(/0+$/, "").replace(/\.$/, "");
