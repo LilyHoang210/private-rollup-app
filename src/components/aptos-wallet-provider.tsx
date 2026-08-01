@@ -6,7 +6,7 @@ import { Network } from "@aptos-labs/ts-sdk";
 export function AptosWalletProvider({ children }: { children: React.ReactNode }) {
   return (
     <AptosWalletAdapterProvider
-      autoConnect={false}
+      autoConnect
       dappConfig={{ network: Network.TESTNET }}
       disableTelemetry
     >
