@@ -28,6 +28,22 @@ describe("local upload cache", () => {
     expect(readLocalUploadBatches()).toEqual([]);
   });
 
+  it("migrates legacy cached billing fields to APT octas", () => {
+    const legacy = {
+      ...batchFixture("legacy-batch", "Legacy upload", 100),
+      billing: {
+        reserveMicrocredits: 25_000,
+        creditStatus: "reserved",
+      },
+    };
+    localStorage.setItem("private-rollup:upload-batches:v1", JSON.stringify([legacy]));
+
+    expect(readLocalUploadBatches()[0].billing).toEqual({
+      reserveOctas: 25_000,
+      paymentStatus: "reserved",
+    });
+  });
+
   it("merges API batches with local batches without duplicating API records", () => {
     const apiBatch = batchFixture("batch-1", "API upload", 100);
     const localOnlyBatch = batchFixture("batch-2", "Local upload", 200);

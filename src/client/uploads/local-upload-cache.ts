@@ -21,7 +21,7 @@ export function readLocalUploadBatches(
       return [];
     }
 
-    return parsed.filter(isUploadBatchLike);
+    return parsed.filter(isUploadBatchLike).map(normalizeCachedBatch);
   } catch {
     return [];
   }
@@ -94,4 +94,48 @@ function isUploadBatchLike(value: unknown): value is UploadApiBatchResponse {
     typeof batch.totalCiphertextSizeBytes === "number" &&
     Array.isArray(batch.items)
   );
+}
+
+function normalizeCachedBatch(batch: UploadApiBatchResponse): UploadApiBatchResponse {
+  const rawBilling = batch.billing as
+    | UploadApiBatchResponse["billing"]
+    | {
+        reserveMicrocredits?: unknown;
+        settledMicrocredits?: unknown;
+        creditStatus?: unknown;
+      }
+    | undefined;
+  if (!rawBilling) return batch;
+
+  if (
+    "reserveOctas" in rawBilling &&
+    Number.isSafeInteger(rawBilling.reserveOctas) &&
+    typeof rawBilling.paymentStatus === "string"
+  ) {
+    return batch;
+  }
+
+  if (
+    "reserveMicrocredits" in rawBilling &&
+    Number.isSafeInteger(rawBilling.reserveMicrocredits) &&
+    (rawBilling.creditStatus === "reserved" ||
+      rawBilling.creditStatus === "settled" ||
+      rawBilling.creditStatus === "payment_required")
+  ) {
+    return {
+      ...batch,
+      billing: {
+        reserveOctas: rawBilling.reserveMicrocredits as number,
+        settledOctas: Number.isSafeInteger(rawBilling.settledMicrocredits)
+          ? (rawBilling.settledMicrocredits as number)
+          : undefined,
+        paymentStatus: rawBilling.creditStatus as
+          | "reserved"
+          | "settled"
+          | "payment_required",
+      },
+    };
+  }
+
+  return { ...batch, billing: undefined };
 }
