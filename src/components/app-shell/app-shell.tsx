@@ -11,8 +11,8 @@ import {
   Shield,
   Sparkles,
   Upload,
-  Wallet,
 } from "lucide-react";
+import { ConnectedWalletBadge } from "./connected-wallet-badge";
 
 const navItems = [
   { href: "/app", label: "Dashboard", action: "nav.dashboard", icon: Gauge },
@@ -101,10 +101,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span className="text-xl font-bold text-primary">Private Rollup</span>
             </div>
             <div className="flex items-center gap-4">
-              <div className="hidden items-center gap-2 rounded border border-border bg-surface-low px-3 py-1 md:flex">
-                <Wallet aria-hidden className="h-4 w-4 text-muted" />
-                <span className="font-mono text-xs text-foreground">Wallet connected</span>
-              </div>
+              <ConnectedWalletBadge />
               <button
                 type="button"
                 aria-label="Notifications"
