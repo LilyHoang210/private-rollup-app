@@ -16,8 +16,10 @@ export function WalletConnectPanel() {
   const [status, setStatus] = useState<ConnectionStatus>("idle");
   const [message, setMessage] = useState("");
   const [pendingWalletName, setPendingWalletName] = useState<string | null>(null);
+  const [isWalletPickerOpen, setWalletPickerOpen] = useState(false);
   const authStartedRef = useRef(false);
-  const statusMessage = message || walletDetectionMessage(wallets);
+  const extensionWallets = wallets.filter(isExtensionWallet);
+  const statusMessage = message || walletDetectionMessage(extensionWallets);
 
   useEffect(() => {
     if (!pendingWalletName || !connected || !account || authStartedRef.current) {
@@ -49,6 +51,7 @@ export function WalletConnectPanel() {
   async function handleConnect(walletName: string) {
     setStatus("connecting");
     setPendingWalletName(walletName);
+    setWalletPickerOpen(false);
     authStartedRef.current = false;
     setMessage(`Waiting for ${walletName}. Approve the connection and signature request.`);
 
@@ -68,39 +71,16 @@ export function WalletConnectPanel() {
   return (
     <div className="mt-8">
       <div className="flex flex-col items-center justify-center gap-4">
-        {wallets.length > 0 ? (
-          <div className="grid w-full max-w-2xl gap-3 sm:grid-cols-2">
-            {wallets.map((wallet) => (
-              <button
-                key={wallet.name}
-                data-action={`wallet.connect.${slugWalletName(wallet.name)}`}
-                type="button"
-                onClick={() => handleConnect(wallet.name)}
-                disabled={status === "connecting" || isLoading}
-                className="btn-primary inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-transparent bg-primary-container px-8 py-2 text-sm font-semibold text-primary shadow-[0_0_15px_rgba(173,200,245,0.1)] transition-colors hover:bg-[#455f87] disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                <Wallet aria-hidden className="h-5 w-5" />
-                {status === "connecting" ? "Connecting..." : `Connect ${wallet.name}`}
-              </button>
-            ))}
-          </div>
-        ) : (
-          <div className="w-full max-w-2xl rounded-xl border border-border bg-surface/80 p-4 text-left">
-            <div className="flex items-start gap-3">
-              <Wallet aria-hidden className="mt-1 h-5 w-5 text-accent" />
-              <div>
-                <p className="font-semibold text-foreground">
-                  No Aptos wallet extension detected.
-                </p>
-                <p className="mt-1 text-sm text-muted">
-                  Install Petra, Martian, Pontem, Fewcha, or Rise, unlock the wallet,
-                  then refresh this page. The app only asks the wallet to sign a login
-                  challenge; it never asks for your private key or seed phrase.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
+        <button
+          data-action="wallet.connect.open"
+          type="button"
+          onClick={() => setWalletPickerOpen(true)}
+          disabled={status === "connecting" || isLoading}
+          className="btn-primary inline-flex min-h-11 w-full max-w-2xl items-center justify-center gap-2 rounded-lg border border-transparent bg-primary-container px-8 py-2 text-sm font-semibold text-primary shadow-[0_0_15px_rgba(173,200,245,0.1)] transition-colors hover:bg-[#455f87] disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
+        >
+          <Wallet aria-hidden className="h-5 w-5" />
+          {status === "connecting" ? "Connecting..." : "Connect wallet"}
+        </button>
         <Link
           data-action="nav.recovery"
           href="/app/recovery"
@@ -113,6 +93,67 @@ export function WalletConnectPanel() {
       <p aria-live="polite" className="mt-3 text-sm text-muted">
         {statusMessage}
       </p>
+      {isWalletPickerOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="wallet-picker-title"
+            className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 text-left shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 id="wallet-picker-title" className="text-xl font-semibold text-foreground">
+                  Choose a wallet
+                </h2>
+                <p className="mt-2 text-sm leading-relaxed text-muted">
+                  Select one installed Aptos wallet extension. The app will ask it to
+                  sign a login challenge; it will not ask for your private key.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWalletPickerOpen(false)}
+                className="rounded-lg border border-border px-3 py-1 text-sm font-semibold text-muted transition-colors hover:text-foreground"
+              >
+                Close
+              </button>
+            </div>
+
+            {extensionWallets.length > 0 ? (
+              <div className="mt-5 space-y-3">
+                {extensionWallets.map((wallet) => (
+                  <button
+                    key={wallet.name}
+                    data-action={`wallet.connect.${slugWalletName(wallet.name)}`}
+                    type="button"
+                    aria-label={wallet.name}
+                    onClick={() => handleConnect(wallet.name)}
+                    disabled={status === "connecting" || isLoading}
+                    className="flex min-h-12 w-full items-center justify-between rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold text-foreground transition-colors hover:border-primary hover:bg-surface-high disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <Wallet aria-hidden className="h-5 w-5 text-primary" />
+                      {wallet.name}
+                    </span>
+                    <span aria-hidden className="text-xs text-muted">Connect</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-5 rounded-xl border border-border bg-background p-4">
+                <p className="font-semibold text-foreground">
+                  No Aptos wallet extension detected.
+                </p>
+                <p className="mt-2 text-sm leading-relaxed text-muted">
+                  Install Petra, Martian, Pontem, Fewcha, or Rise, unlock the wallet,
+                  then refresh this page.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -127,10 +168,14 @@ function shortAddress(address: string) {
 
 function walletDetectionMessage(wallets: ReadonlyArray<{ name: string }>) {
   if (wallets.length > 0) {
-    return "Choose the wallet extension you want to use for this browser session.";
+    return "Click Connect wallet to choose an installed Aptos wallet extension.";
   }
 
   return "Install a supported wallet extension to continue.";
+}
+
+function isExtensionWallet(wallet: { name: string }) {
+  return !wallet.name.toLowerCase().startsWith("continue with ");
 }
 
 function slugWalletName(walletName: string) {

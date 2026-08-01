@@ -45,20 +45,30 @@ describe("wallet connect panel", () => {
   it("explains what to do when no Aptos wallet extension is detected", async () => {
     render(<WalletConnectPanel />);
 
-    expect(await screen.findByText("No Aptos wallet extension detected.")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Connect wallet" }));
+
+    expect(
+      await screen.findByRole("dialog", { name: "Choose a wallet" }),
+    ).toBeVisible();
+    expect(screen.getByText("No Aptos wallet extension detected.")).toBeVisible();
     expect(
       screen.getByText(/Install Petra, Martian, Pontem, Fewcha, or Rise/),
     ).toBeVisible();
   });
 
-  it("uses the Aptos wallet adapter instead of direct injected Petra APIs", async () => {
+  it("opens one wallet picker modal and connects with an installed extension wallet", async () => {
     const deprecatedPetraConnect = vi.fn(() => {
       throw new Error("Direct usage of the PetraApiClient is deprecated.");
     });
     (window as unknown as { aptos?: unknown }).aptos = {
       connect: deprecatedPetraConnect,
     };
-    walletState.current.wallets = [{ name: "Petra" }, { name: "Martian" }];
+    walletState.current.wallets = [
+      { name: "Petra" },
+      { name: "OKX Wallet" },
+      { name: "Continue with Google" },
+      { name: "Continue with Apple" },
+    ];
     connect.mockImplementation(async () => {
       walletState.current.connected = true;
       walletState.current.account = {
@@ -79,10 +89,20 @@ describe("wallet connect panel", () => {
 
     const { rerender } = render(<WalletConnectPanel />);
 
-    expect(await screen.findByRole("button", { name: "Connect Petra" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Connect Martian" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Connect wallet" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Connect Petra" })).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Connect Petra" }));
+    await userEvent.click(screen.getByRole("button", { name: "Connect wallet" }));
+
+    expect(
+      await screen.findByRole("dialog", { name: "Choose a wallet" }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Petra" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "OKX Wallet" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Continue with Google" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Continue with Apple" })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Petra" }));
     rerender(<WalletConnectPanel />);
 
     expect(connect).toHaveBeenCalledWith("Petra");
