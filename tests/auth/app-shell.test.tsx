@@ -171,6 +171,35 @@ describe("app shell", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/auth/logout", { method: "POST" });
   });
 
+  it("lets an already connected wallet sign in again when the web session is missing", async () => {
+    render(
+      <AppShell>
+        <h1>Dashboard</h1>
+      </AppShell>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /Connected wallet/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Sign in to web session" }),
+    );
+
+    expect(createWalletChallenge).toHaveBeenCalledWith({
+      walletAddress: "0x1234567890abcdef",
+      domain: "localhost",
+      uri: "http://localhost:3000",
+      chainId: "aptos-testnet",
+    });
+    expect(verifyWalletChallenge).toHaveBeenCalledWith({
+      challengeId: "challenge-id",
+      walletAddress: "0x1234567890abcdef",
+      publicKey: "0xpublic",
+      domain: "localhost",
+      signature: "0xsig",
+      fullMessage: "APTOS\nchallenge",
+    });
+    expect(await screen.findByText("Connected on aptos-testnet.")).toBeVisible();
+  });
+
   it("logs out a server-hydrated session even when the wallet adapter is disconnected", async () => {
     walletState.current.connected = false;
     walletState.current.account = null;

@@ -59,6 +59,7 @@ export function ConnectedWalletBadge() {
     : connected || isLoading
       ? "Wallet connected"
       : "Connect wallet";
+  const canSignInWebSession = Boolean(connected && account && !hydratedSession.authenticated);
 
   useEffect(() => {
     let active = true;
@@ -197,6 +198,42 @@ export function ConnectedWalletBadge() {
     }
   }
 
+  async function handleSignInWebSession() {
+    if (!account) {
+      setStatus("failed");
+      setMessage("Reconnect the wallet before signing in to the web session.");
+      return;
+    }
+
+    setStatus("connecting");
+    setMessage("Waiting for wallet signature. Approve the login challenge.");
+    authStartedRef.current = true;
+
+    try {
+      const { chainId } = await authenticateConnectedWallet({
+        account,
+        signMessage,
+      });
+      setHydratedSession({
+        authenticated: true,
+        chainId,
+        walletAddress: account.address.toString(),
+        expiresAt: "",
+      });
+      setStatus("connected");
+      setMessage(`Connected on ${chainId}.`);
+      window.dispatchEvent(new Event("private-rollup:session-authenticated"));
+    } catch (error) {
+      authStartedRef.current = false;
+      setStatus("failed");
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not verify the connected Aptos wallet.",
+      );
+    }
+  }
+
   function openPanel() {
     setBalanceState(displayAddress ? { kind: "loading" } : { kind: "idle" });
     setPanelOpen(true);
@@ -229,8 +266,10 @@ export function ConnectedWalletBadge() {
           }
           status={status}
           walletName={wallet?.name ?? (displayAddress ? "Session wallet" : undefined)}
+          canSignInWebSession={canSignInWebSession}
           onClose={() => setPanelOpen(false)}
           onLogout={handleLogout}
+          onSignInWebSession={handleSignInWebSession}
         />
       ) : null}
 
@@ -250,17 +289,21 @@ export function ConnectedWalletBadge() {
 function WalletDetailsDialog({
   address,
   balanceState,
+  canSignInWebSession,
   message,
   onClose,
   onLogout,
+  onSignInWebSession,
   status,
   walletName,
 }: {
   address?: string;
   balanceState: BalanceState;
+  canSignInWebSession: boolean;
   message: string;
   onClose: () => void;
   onLogout: () => void;
+  onSignInWebSession: () => void;
   status: WalletActionStatus;
   walletName?: string;
 }) {
@@ -299,11 +342,22 @@ function WalletDetailsDialog({
 
         {message ? <p className="mt-4 text-sm text-muted">{message}</p> : null}
 
+        {canSignInWebSession ? (
+          <button
+            type="button"
+            onClick={onSignInWebSession}
+            disabled={status === "connecting"}
+            className="mt-5 inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-[#133155] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {status === "connecting" ? "Waiting for signature..." : "Sign in to web session"}
+          </button>
+        ) : null}
+
         <button
           type="button"
           onClick={onLogout}
           disabled={status === "logging_out"}
-          className="mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:border-error hover:text-error disabled:cursor-not-allowed disabled:opacity-70"
+          className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:border-error hover:text-error disabled:cursor-not-allowed disabled:opacity-70"
         >
           <LogOut aria-hidden className="h-4 w-4" />
           {status === "logging_out" ? "Logging out..." : "Log out"}

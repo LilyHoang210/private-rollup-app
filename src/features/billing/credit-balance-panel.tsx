@@ -20,7 +20,9 @@ export function CreditBalancePanel() {
   useEffect(() => {
     let active = true;
 
-    void getCreditAccount()
+    function loadCredits() {
+      setState({ kind: "loading" });
+      void getCreditAccount()
       .then(({ account }) => {
         if (active) {
           setState({ kind: "ready", account });
@@ -31,9 +33,14 @@ export function CreditBalancePanel() {
           setState({ kind: "failed" });
         }
       });
+    }
+
+    loadCredits();
+    window.addEventListener("private-rollup:session-authenticated", loadCredits);
 
     return () => {
       active = false;
+      window.removeEventListener("private-rollup:session-authenticated", loadCredits);
     };
   }, []);
 

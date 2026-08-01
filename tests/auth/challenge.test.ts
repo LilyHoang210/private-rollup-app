@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   AuthService,
   InMemoryAuthStore,
+  SignedChallengeStore,
   type WalletSignatureVerifier,
 } from "../../src/server/auth/challenge";
 
@@ -72,5 +73,38 @@ describe("wallet auth challenge", () => {
         now: new Date("2026-07-31T00:06:00.000Z"),
       }),
     ).rejects.toThrow("expired");
+  });
+
+  it("verifies a signed challenge across independent server instances", async () => {
+    const issuer = new AuthService(
+      new SignedChallengeStore({ secret: "test-challenge-secret" }),
+      verifier,
+    );
+    const verifierService = new AuthService(
+      new SignedChallengeStore({ secret: "test-challenge-secret" }),
+      verifier,
+    );
+    const challenge = await issuer.createChallenge({
+      walletAddress: "0xabc",
+      domain: "private-rollup.local",
+      uri: "http://private-rollup.local",
+      chainId: "aptos-testnet",
+      now,
+    });
+
+    expect(challenge.id).not.toMatch(/^[0-9a-f-]{36}$/);
+
+    await expect(
+      verifierService.verifyChallenge({
+        challengeId: challenge.id,
+        walletAddress: "0xabc",
+        domain: "private-rollup.local",
+        signature: `signed:${challenge.message}`,
+        now,
+      }),
+    ).resolves.toMatchObject({
+      chainId: "aptos-testnet",
+      walletAddress: "0xabc",
+    });
   });
 });

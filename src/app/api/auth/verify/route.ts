@@ -8,7 +8,7 @@ import {
 } from "@/server/auth/session";
 
 const verifyRequestSchema = z.object({
-  challengeId: z.string().uuid(),
+  challengeId: z.string().min(1),
   walletAddress: z.string().min(1),
   publicKey: z.string().min(1),
   domain: z.string().min(1),
