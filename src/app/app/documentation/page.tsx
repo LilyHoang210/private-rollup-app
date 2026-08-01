@@ -131,6 +131,32 @@ export default function DocumentationPage() {
       </section>
 
       <section className="rounded-xl border border-border bg-surface p-6">
+        <h2 className="text-2xl font-semibold text-foreground">Wallet connection</h2>
+        <div className="mt-5 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+          <div className="rounded-xl border border-border bg-background p-5">
+            <h3 className="text-xl font-semibold text-foreground">What this does</h3>
+            <p className="mt-3 text-sm leading-relaxed text-muted">
+              The landing page looks for installed Aptos browser wallets such as
+              Petra, Martian, Pontem, Fewcha, and Rise. It shows only wallets the
+              browser exposes, then lets you choose which one to connect.
+            </p>
+          </div>
+          <div className="rounded-xl border border-border bg-background p-5">
+            <h3 className="text-xl font-semibold text-foreground">How to use it safely</h3>
+            <ol className="mt-3 space-y-2 text-sm leading-relaxed text-muted">
+              <li>1. Install and unlock one supported Aptos wallet extension.</li>
+              <li>2. Refresh the page so the browser exposes the wallet provider.</li>
+              <li>3. Click the wallet name you trust, then approve the connection.</li>
+              <li>
+                4. The wallet will sign a login challenge. This proves account
+                ownership without exposing your private key or seed phrase.
+              </li>
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-border bg-surface p-6">
         <h2 className="text-2xl font-semibold text-foreground">Feature guide</h2>
         <div className="mt-5 grid gap-4 lg:grid-cols-2">
           {featureGuides.map((feature) => (

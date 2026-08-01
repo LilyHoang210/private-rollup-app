@@ -1,14 +1,17 @@
 import { describe, expect, it } from "vitest";
+import { Account } from "@aptos-labs/ts-sdk";
 import { POST as createChallenge } from "../../src/app/api/auth/challenge/route";
 import { POST as verifyChallenge } from "../../src/app/api/auth/verify/route";
 
 describe("auth API routes", () => {
-  it("creates and verifies a demo wallet challenge through HTTP handlers", async () => {
+  it("creates and verifies a signed Aptos wallet challenge through HTTP handlers", async () => {
+    const account = Account.generate();
+
     const challengeResponse = await createChallenge(
       new Request("http://localhost/api/auth/challenge", {
         method: "POST",
         body: JSON.stringify({
-          walletAddress: "0xabc",
+          walletAddress: account.accountAddress.toStringLong(),
           domain: "localhost",
           uri: "http://localhost",
           chainId: "aptos-testnet",
@@ -24,14 +27,15 @@ describe("auth API routes", () => {
     const verifyResponse = await verifyChallenge(
       new Request("http://localhost/api/auth/verify", {
         method: "POST",
-        body: JSON.stringify({
-          challengeId: challenge.id,
-          walletAddress: "0xabc",
-          domain: "localhost",
-          signature: `signed:${challenge.message}`,
+          body: JSON.stringify({
+            challengeId: challenge.id,
+            walletAddress: account.accountAddress.toStringLong(),
+            publicKey: account.publicKey.toString(),
+            domain: "localhost",
+            signature: account.privateKey.signText(challenge.message).toString(),
+          }),
         }),
-      }),
-    );
+      );
 
     expect(verifyResponse.status).toBe(200);
     expect(verifyResponse.headers.get("set-cookie")).toContain("HttpOnly");

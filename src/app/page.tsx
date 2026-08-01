@@ -14,13 +14,13 @@ export default function Home() {
         <nav className="hidden items-center gap-6 md:flex" aria-label="Landing">
           <a
             className="text-sm font-semibold text-muted transition-colors hover:text-white"
-            href="/app/recovery"
+            href="/app/documentation"
           >
             Documentation
           </a>
           <a
             className="text-sm font-semibold text-muted transition-colors hover:text-white"
-            href="/app"
+            href="/app/support"
           >
             Support
           </a>

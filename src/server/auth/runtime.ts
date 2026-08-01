@@ -1,15 +1,6 @@
-import { AuthService, InMemoryAuthStore, type WalletSignatureVerifier } from "./challenge";
+import { aptosWalletVerifier } from "./aptos-signature";
+import { AuthService, InMemoryAuthStore } from "./challenge";
 
 const store = new InMemoryAuthStore();
 
-const verifier: WalletSignatureVerifier = {
-  async verify({ message, signature }) {
-    if (process.env.NODE_ENV === "production") {
-      return false;
-    }
-
-    return signature === `signed:${message}`;
-  },
-};
-
-export const authService = new AuthService(store, verifier);
+export const authService = new AuthService(store, aptosWalletVerifier);

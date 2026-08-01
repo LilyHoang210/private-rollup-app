@@ -13,15 +13,19 @@ export interface CreateChallengeInput {
 export interface VerifyChallengeInput {
   challengeId: string;
   walletAddress: string;
+  publicKey?: string;
   domain: string;
   signature: string;
+  fullMessage?: string;
   now?: Date;
 }
 
 export interface WalletSignatureVerifier {
   verify(input: {
     walletAddress: string;
+    publicKey?: string;
     message: string;
+    fullMessage?: string;
     signature: string;
   }): Promise<boolean>;
 }
@@ -137,7 +141,9 @@ export class AuthService {
 
     const verified = await this.verifier.verify({
       walletAddress: input.walletAddress,
+      publicKey: input.publicKey,
       message: challenge.message,
+      fullMessage: input.fullMessage,
       signature: input.signature,
     });
 

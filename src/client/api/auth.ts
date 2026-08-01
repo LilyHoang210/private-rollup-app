@@ -1,8 +1,23 @@
-export interface DemoWalletConnectInput {
+export interface WalletChallengeInput {
   walletAddress: string;
   domain: string;
   uri: string;
   chainId: "aptos-testnet";
+}
+
+export interface WalletVerifyInput {
+  challengeId: string;
+  walletAddress: string;
+  publicKey: string;
+  domain: string;
+  signature: string;
+  fullMessage?: string;
+}
+
+export interface WalletChallengeResponse {
+  id: string;
+  message: string;
+  expiresAt: string;
 }
 
 export interface AuthSessionResponse {
@@ -30,20 +45,24 @@ async function postJson<TResponse>(
   return (await response.json()) as TResponse;
 }
 
-export async function connectDemoWallet(
-  input: DemoWalletConnectInput,
+export async function createWalletChallenge(
+  input: WalletChallengeInput,
   fetcher: Fetcher = fetch,
-): Promise<AuthSessionResponse> {
-  const challenge = await postJson<{ id: string; message: string }>(
+): Promise<WalletChallengeResponse> {
+  return postJson<WalletChallengeResponse>(
     fetcher,
     "/api/auth/challenge",
     input,
   );
+}
 
-  return postJson<AuthSessionResponse>(fetcher, "/api/auth/verify", {
-    challengeId: challenge.id,
-    walletAddress: input.walletAddress,
-    domain: input.domain,
-    signature: `signed:${challenge.message}`,
-  });
+export async function verifyWalletChallenge(
+  input: WalletVerifyInput,
+  fetcher: Fetcher = fetch,
+): Promise<AuthSessionResponse> {
+  return postJson<AuthSessionResponse>(
+    fetcher,
+    "/api/auth/verify",
+    input,
+  );
 }

@@ -10,8 +10,10 @@ import {
 const verifyRequestSchema = z.object({
   challengeId: z.string().uuid(),
   walletAddress: z.string().min(1),
+  publicKey: z.string().min(1),
   domain: z.string().min(1),
   signature: z.string().min(1),
+  fullMessage: z.string().min(1).optional(),
 });
 
 export async function POST(request: Request) {

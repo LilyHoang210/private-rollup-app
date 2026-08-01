@@ -22,5 +22,8 @@ describe("user-facing guidance content", () => {
     expect(combined).toContain("What this does");
     expect(combined).toContain("How to use it");
     expect(combined).toContain("Security checklist");
+    expect(combined).toContain("Petra");
+    expect(combined).toContain("Martian");
+    expect(combined).toContain("sign a login challenge");
   });
 });
