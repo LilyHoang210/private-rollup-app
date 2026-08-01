@@ -9,6 +9,7 @@ const createWalletChallenge = vi.fn();
 const verifyWalletChallenge = vi.fn();
 const connect = vi.fn();
 const signMessage = vi.fn();
+const routerPush = vi.hoisted(() => vi.fn());
 const walletState = vi.hoisted(() => ({
   current: {
     connected: false,
@@ -32,9 +33,16 @@ vi.mock("@aptos-labs/wallet-adapter-react", () => ({
   useWallet: () => walletState.current,
 }));
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: routerPush,
+  }),
+}));
+
 describe("wallet connect panel", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    routerPush.mockReset();
     walletState.current.connected = false;
     walletState.current.isLoading = false;
     walletState.current.account = null;
@@ -122,5 +130,6 @@ describe("wallet connect panel", () => {
       fullMessage: "APTOS\nchallenge",
     });
     expect(await screen.findByText(/Connected 0xabc on aptos-testnet/)).toBeVisible();
+    expect(routerPush).toHaveBeenCalledWith("/app");
   });
 });

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Wallet, Terminal } from "lucide-react";
 import {
   createWalletChallenge,
@@ -13,6 +14,7 @@ type ConnectionStatus = "idle" | "connecting" | "connected" | "failed";
 
 export function WalletConnectPanel() {
   const { account, connect, connected, isLoading, signMessage, wallets } = useWallet();
+  const router = useRouter();
   const [status, setStatus] = useState<ConnectionStatus>("idle");
   const [message, setMessage] = useState("");
   const [pendingWalletName, setPendingWalletName] = useState<string | null>(null);
@@ -35,6 +37,7 @@ export function WalletConnectPanel() {
         setStatus("connected");
         setPendingWalletName(null);
         setMessage(`Connected ${shortAddress(walletAddress)} on ${chainId}.`);
+        router.push("/app");
       },
       onFailure: (error) => {
         authStartedRef.current = false;
@@ -46,7 +49,7 @@ export function WalletConnectPanel() {
         );
       },
     });
-  }, [account, connected, pendingWalletName, signMessage]);
+  }, [account, connected, pendingWalletName, router, signMessage]);
 
   async function handleConnect(walletName: string) {
     setStatus("connecting");
