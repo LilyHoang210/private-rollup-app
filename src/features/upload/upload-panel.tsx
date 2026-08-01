@@ -161,12 +161,19 @@ export function UploadPanel() {
         retentionDays,
         items: uploadItems,
       });
+      const completionItems = uploadItems.map((item) => ({
+        localId: item.localId,
+        ciphertextSha256: item.ciphertextSha256,
+        stagingRef: `local-browser://${created.id}/${item.localId}`,
+      }));
       const completed = await completeUploadBatch(created.id, {
-        items: uploadItems.map((item) => ({
-          localId: item.localId,
-          ciphertextSha256: item.ciphertextSha256,
-          stagingRef: `local-browser://${created.id}/${item.localId}`,
-        })),
+        items: completionItems,
+      }).catch((error) => {
+        if (isServerlessCompleteMemoryMiss(error)) {
+          return buildLocalCompletedBatch(created, completionItems);
+        }
+
+        throw error;
       });
 
       rememberLocalUploadBatch(completed);
@@ -374,6 +381,36 @@ export function UploadPanel() {
       </div>
     </section>
   );
+}
+
+function isServerlessCompleteMemoryMiss(error: unknown) {
+  return error instanceof Error && error.message.includes("404");
+}
+
+function buildLocalCompletedBatch(
+  created: UploadApiBatchResponse,
+  completionItems: Array<{
+    localId: string;
+    ciphertextSha256: string;
+    stagingRef: string;
+  }>,
+): UploadApiBatchResponse {
+  const completionByLocalId = new Map(
+    completionItems.map((item) => [item.localId, item] as const),
+  );
+  const now = new Date().toISOString();
+
+  return {
+    ...created,
+    status: "waiting_for_pack",
+    updatedAt: created.updatedAt ?? now,
+    items: created.items.map((item) => ({
+      ...item,
+      status: "waiting_for_pack",
+      stagingRef: completionByLocalId.get(item.localId)?.stagingRef,
+      updatedAt: item.updatedAt ?? now,
+    })),
+  };
 }
 
 async function prepareEncryptedUploadItems(input: {

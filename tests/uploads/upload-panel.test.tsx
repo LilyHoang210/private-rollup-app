@@ -166,6 +166,73 @@ describe("upload panel", () => {
     expect(await screen.findByText(/Control-plane batch queued/)).toBeVisible();
     expect(screen.getByText(/No Shelby or Aptos transaction has been submitted/)).toBeVisible();
   });
+
+  it("keeps a created upload queued locally when the serverless complete step loses memory", async () => {
+    localStorage.clear();
+    vi.spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url.includes("/api/storage/status")) {
+          return Response.json({
+            ready: false,
+            driver: "shelby",
+            network: "shelbynet",
+            missing: ["SHELBY_API_URL"],
+            mode: "control_plane_only",
+          });
+        }
+        if (url.includes("/api/credits")) {
+          return Response.json(creditFixture());
+        }
+        if (url === "/api/uploads" && init?.method === "POST") {
+          return Response.json(
+            {
+              id: "batch-serverless-memory",
+              status: "staging",
+              retentionDays: 90,
+              totalCiphertextSizeBytes: 79,
+              billing: {
+                creditStatus: "reserved",
+                reserveMicrocredits: 1_500,
+              },
+              items: [
+                {
+                  id: "item-1",
+                  localId: "local-0",
+                  label: "Serverless memory test",
+                  category: "document",
+                  plaintextSizeBytes: 63,
+                  ciphertextSizeBytes: 79,
+                  ciphertextSha256: "f".repeat(64),
+                  encryptedManifest: "manifest",
+                  wrappedDek: "dek",
+                  status: "staging",
+                  packStrategy: "shared_pack",
+                },
+              ],
+            },
+            { status: 201 },
+          );
+        }
+
+        return Response.json({ error: "UPLOAD_NOT_FOUND" }, { status: 404 });
+      });
+
+    render(<UploadPanel />);
+
+    await userEvent.upload(
+      screen.getByLabelText("Select files"),
+      new File(["serverless fallback"], "fallback.txt", { type: "text/plain" }),
+    );
+    await userEvent.type(screen.getByLabelText("Private label"), "Serverless memory test");
+    await userEvent.click(screen.getByRole("button", { name: "Encrypt and queue upload" }));
+
+    expect(await screen.findByText(/Control-plane batch queued/)).toBeVisible();
+    expect(screen.getByText("waiting_for_pack")).toBeVisible();
+    expect(localStorage.getItem("private-rollup:upload-batches:v1")).toContain(
+      "batch-serverless-memory",
+    );
+  });
 });
 
 function creditFixture() {
