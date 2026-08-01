@@ -13,7 +13,6 @@ import {
   WalletCards,
 } from "lucide-react";
 import { parseAptToOctas } from "@/domain/apt";
-import { Aptos, AptosConfig, Network, type TransactionSubmitter } from "@aptos-labs/ts-sdk";
 import {
   useWallet,
   type AptosSignAndSubmitTransactionOutput,
@@ -27,7 +26,6 @@ import {
   type AptAccountResponse,
 } from "@/client/api/apt-account";
 
-const APTOS_TESTNET = new Aptos(new AptosConfig({ network: Network.TESTNET }));
 const WALLET_RESPONSE_TIMEOUT_MS = 45_000;
 
 type AccountState =
@@ -77,7 +75,7 @@ export function AptBalancePanel() {
       setState({ kind: "ready", account });
       setNotice("On-chain APT balance synced successfully.");
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "APT sync failed");
+      setNotice(userFacingErrorMessage(error, "APT sync failed"));
     } finally {
       setBusy(null);
     }
@@ -104,7 +102,7 @@ export function AptBalancePanel() {
       setDepositAmount("");
       setNotice(`Deposit confirmed: ${shortHash(submitted.hash)}`);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "APT deposit failed");
+      setNotice(userFacingErrorMessage(error, "APT deposit failed"));
     } finally {
       setBusy(null);
     }
@@ -137,7 +135,7 @@ export function AptBalancePanel() {
       setAmount("");
       setNotice(`Withdrawal confirmed: ${shortHash(result.transactionHash)}`);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "APT withdrawal failed");
+      setNotice(userFacingErrorMessage(error, "APT withdrawal failed"));
     } finally {
       setBusy(null);
     }
@@ -319,7 +317,6 @@ export function buildDepositTransaction(input: {
       typeArguments: [],
       functionArguments: [input.recipientAddress, input.amountOctas],
     },
-    transactionSubmitter: aptosTestnetSubmitter,
   };
 }
 
@@ -346,15 +343,20 @@ export async function withWalletResponseTimeout(
   }
 }
 
-const aptosTestnetSubmitter: TransactionSubmitter = {
-  async submitTransaction(args) {
-    return APTOS_TESTNET.transaction.submit.simple({
-      transaction: args.transaction,
-      senderAuthenticator: args.senderAuthenticator,
-      feePayerAuthenticator: args.feePayerAuthenticator,
-    });
-  },
-};
+export function userFacingErrorMessage(error: unknown, fallback = "Request failed") {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "string" && error.trim()) return error;
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string" &&
+    error.message.trim()
+  ) {
+    return error.message;
+  }
+  return fallback;
+}
 
 function octasToInput(octas: number) {
   return (octas / 100_000_000).toFixed(8).replace(/0+$/, "").replace(/\.$/, "");

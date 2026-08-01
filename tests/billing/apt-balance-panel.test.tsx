@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AptBalancePanel,
   buildDepositTransaction,
+  userFacingErrorMessage,
   withWalletResponseTimeout,
 } from "../../src/features/billing/apt-balance-panel";
 
@@ -62,7 +63,7 @@ describe("APT balance panel", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("builds an explicit Aptos transfer payload and dapp submitter for wallet deposits", () => {
+  it("builds an explicit Aptos transfer payload for wallet-standard deposits", () => {
     const transaction = buildDepositTransaction({
       recipientAddress: walletFixture().address,
       amountOctas: 1_000_000,
@@ -75,13 +76,19 @@ describe("APT balance panel", () => {
         functionArguments: [walletFixture().address, 1_000_000],
       },
     });
-    expect(transaction.transactionSubmitter).toBeDefined();
+    expect(transaction.transactionSubmitter).toBeUndefined();
   });
 
   it("times out a wallet deposit when the wallet closes without returning a hash", async () => {
     await expect(
       withWalletResponseTimeout(new Promise(() => undefined), 10),
     ).rejects.toThrow("Wallet did not return a transaction hash");
+  });
+
+  it("shows useful wallet errors when adapters reject with non-Error values", () => {
+    expect(userFacingErrorMessage("User rejected")).toBe("User rejected");
+    expect(userFacingErrorMessage({ message: "Wallet is locked" })).toBe("Wallet is locked");
+    expect(userFacingErrorMessage(null, "Fallback")).toBe("Fallback");
   });
 
   it("submits a wallet transfer and syncs the confirmed APT balance", async () => {
@@ -130,7 +137,6 @@ describe("APT balance panel", () => {
           typeArguments: [],
           functionArguments: [walletFixture().address, 1_000_000],
         }),
-        transactionSubmitter: expect.any(Object),
       }),
     );
     expect(await screen.findByText("Deposit confirmed: 0x11111111...11111111")).toBeVisible();
