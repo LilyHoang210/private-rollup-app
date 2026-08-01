@@ -9,6 +9,7 @@ import {
   RotateCcwKey,
   Settings,
   Shield,
+  Sparkles,
   Upload,
   Wallet,
 } from "lucide-react";
@@ -17,6 +18,7 @@ const navItems = [
   { href: "/app", label: "Dashboard", action: "nav.dashboard", icon: Gauge },
   { href: "/app/upload", label: "File Upload", action: "nav.upload", icon: Upload },
   { href: "/app/packs", label: "Blob Packs", action: "nav.packs", icon: Archive },
+  { href: "/app/setup", label: "Setup Wizard", action: "nav.setup", icon: Sparkles },
   {
     href: "/app/recovery",
     label: "Recovery",
@@ -129,7 +131,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           <nav
             aria-label="Primary mobile"
-            className="fixed bottom-0 left-0 z-50 grid h-16 w-full grid-cols-4 rounded-t-xl border-t border-border bg-surface-low px-4 pb-2 shadow-lg md:hidden"
+            className="fixed bottom-0 left-0 z-50 grid h-16 w-full grid-cols-5 rounded-t-xl border-t border-border bg-surface-low px-2 pb-2 shadow-lg md:hidden"
           >
             {navItems.map((item) => (
               <Link

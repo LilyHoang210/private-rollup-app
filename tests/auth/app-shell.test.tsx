@@ -32,6 +32,11 @@ describe("app shell", () => {
         .getAllByRole("link", { name: "Recovery" })
         .every((link) => link.getAttribute("data-action") === "nav.recovery"),
     ).toBe(true);
+    expect(
+      screen
+        .getAllByRole("link", { name: "Setup Wizard" })
+        .every((link) => link.getAttribute("data-action") === "nav.setup"),
+    ).toBe(true);
     expect(screen.getByRole("main")).toContainElement(
       screen.getByRole("heading", { name: "Dashboard" }),
     );

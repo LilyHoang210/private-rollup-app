@@ -101,16 +101,30 @@ export function UploadPanel() {
           <span className="block text-sm font-semibold text-muted-strong">
             Select files
           </span>
-          <input
-            aria-label="Select files"
-            multiple
-            type="file"
-            onChange={(event) => {
-              setFiles(Array.from(event.currentTarget.files ?? []));
-              setState({ kind: "idle" });
-            }}
-            className="block w-full rounded-lg border border-border bg-background px-4 py-3 text-sm text-foreground file:mr-4 file:rounded file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-semibold file:text-[#133155]"
-          />
+          <div className="rounded-lg border border-border bg-background p-3">
+            <input
+              id="upload-files"
+              aria-label="Select files"
+              multiple
+              type="file"
+              onChange={(event) => {
+                setFiles(Array.from(event.currentTarget.files ?? []));
+                setState({ kind: "idle" });
+              }}
+              className="sr-only"
+            />
+            <label
+              htmlFor="upload-files"
+              className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded bg-primary px-4 py-2 text-sm font-semibold text-[#133155] transition-opacity hover:opacity-90"
+            >
+              Choose files
+            </label>
+            <span className="ml-3 text-sm text-muted">
+              {files.length === 0
+                ? "No files selected"
+                : `${files.length} file(s) selected`}
+            </span>
+          </div>
         </label>
 
         <label className="space-y-2">
@@ -212,6 +226,21 @@ export function UploadPanel() {
             </div>
           </div>
         ) : null}
+      </div>
+
+      <div className="mt-5 grid gap-4 md:grid-cols-3">
+        <HelpCard
+          title="What this does"
+          body="Encrypts selected files locally, then queues only ciphertext metadata and wrapped file keys."
+        />
+        <HelpCard
+          title="How to use it"
+          body="Choose files, add a private label, pick a file type label, then queue the encrypted upload."
+        />
+        <HelpCard
+          title="Security checklist"
+          body="Save the receipt after upload and keep your recovery kit offline. Do not paste private keys into the app."
+        />
       </div>
     </section>
   );
@@ -329,4 +358,15 @@ function formatBytes(bytes: number) {
     return `${(bytes / 1024).toFixed(1)} KiB`;
   }
   return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
+function HelpCard({ title, body }: { title: string; body: string }) {
+  return (
+    <section className="rounded-xl border border-border bg-background p-4">
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-foreground">
+        {title}
+      </h3>
+      <p className="mt-3 text-sm leading-relaxed text-muted">{body}</p>
+    </section>
+  );
 }

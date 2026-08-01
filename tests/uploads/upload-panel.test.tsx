@@ -33,6 +33,9 @@ describe("upload panel", () => {
 
     render(<UploadPanel />);
 
+    expect(screen.getByText("Choose files")).toBeVisible();
+    expect(screen.queryByText(/Chọn|Không có tệp/i)).not.toBeInTheDocument();
+
     await userEvent.upload(
       screen.getByLabelText("Select files"),
       new File(["super secret plaintext"], "secret.txt", { type: "text/plain" }),

@@ -12,6 +12,9 @@ test("primary app navigation reaches every top-level screen", async ({ page }) =
   await page.getByRole("link", { name: "Recovery" }).first().click();
   await expect(page.getByRole("heading", { name: "Recovery Console" })).toBeVisible();
 
+  await page.getByRole("link", { name: "Setup Wizard" }).first().click();
+  await expect(page.getByRole("heading", { name: "Secure Setup Wizard" })).toBeVisible();
+
   await page.getByRole("link", { name: "Dashboard" }).first().click();
   await expect(page.getByRole("heading", { name: "Dashboard Overview" })).toBeVisible();
 });

@@ -10,7 +10,36 @@ export default function DashboardPage() {
           </h1>
           <p className="text-muted">Monitor encrypted assets and pack states.</p>
         </div>
+        <Link
+          href="/app/setup"
+          className="flex min-h-11 items-center justify-center rounded bg-primary px-5 py-2 text-sm font-semibold text-[#133155] transition-opacity hover:opacity-90"
+        >
+          Start Secure Setup
+        </Link>
       </div>
+
+      <section className="rounded-xl border border-primary/40 bg-surface p-6">
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+          <div>
+            <p className="font-mono text-sm uppercase tracking-wider text-primary">
+              Recommended for first-time users
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold text-foreground">
+              Complete the Secure Setup Wizard before uploading important files.
+            </h2>
+            <p className="mt-2 max-w-3xl text-muted">
+              The wizard explains what each feature does, how to use it, and the
+              security steps needed to keep recovery under your control.
+            </p>
+          </div>
+          <Link
+            href="/app/setup"
+            className="flex min-h-11 shrink-0 items-center justify-center rounded border border-border bg-background px-5 py-2 text-sm font-semibold text-foreground transition-colors hover:border-primary"
+          >
+            Open Wizard
+          </Link>
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Metric label="Active Packs" value="12" />
