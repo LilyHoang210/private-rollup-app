@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   completeUploadBatch,
   createUploadBatch,
@@ -6,7 +6,10 @@ import {
   listUploadBatchesForUser,
   resetUploadStoreForTests,
 } from "../../src/server/uploads/service";
-import { resetCreditStoreForTests } from "../../src/server/billing/credit-service";
+import {
+  recordWalletDeposit,
+  resetAptStoreForTests,
+} from "../../src/server/billing/apt-account-service";
 
 describe("upload service", () => {
   const baseItem = {
@@ -23,7 +26,7 @@ describe("upload service", () => {
 
   afterEach(() => {
     resetUploadStoreForTests();
-    resetCreditStoreForTests();
+    resetAptStoreForTests();
   });
 
   it("creates idempotent batches and assigns pack strategy per item size", () => {
@@ -70,11 +73,11 @@ describe("upload service", () => {
     ).toThrow("Plaintext payload fields are not accepted");
   });
 
-  it("does not retain a batch when credit reserve fails", () => {
+  it("does not retain a batch when the APT reserve fails", () => {
     expect(() =>
       createUploadBatch({
         userId: "demo-user",
-        idempotencyKey: "idem-insufficient-credit",
+        idempotencyKey: "idem-insufficient-apt",
         retentionDays: 365,
         items: [
           {
@@ -84,7 +87,7 @@ describe("upload service", () => {
           },
         ],
       }),
-    ).toThrow("Insufficient credit for upload reserve");
+    ).toThrow("Insufficient available APT for this upload");
 
     expect(listUploadBatchesForUser("demo-user")).toEqual([]);
   });
@@ -178,3 +181,12 @@ describe("upload service", () => {
     expect(failed?.items[0].status).toBe("failed");
   });
 });
+  beforeEach(() => {
+    for (const userId of ["demo-user", "other-user"]) {
+      recordWalletDeposit({
+        userId,
+        depositId: `deposit-${userId}`,
+        amountOctas: 1_000_000_000,
+      });
+    }
+  });

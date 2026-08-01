@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Download } from "lucide-react";
-import { formatCredits } from "@/client/api/credits";
+import { formatApt } from "@/client/api/apt-account";
 import type { UploadApiBatchResponse } from "@/client/api/uploads";
 import { listUploadBatches } from "@/client/api/uploads";
 import {
@@ -466,25 +466,25 @@ function strategyLabel(strategy?: string) {
 
 function billingSummary(batch: UploadApiBatchResponse) {
   if (!batch.billing) {
-    return "No credit reserve";
+    return "No APT reserve";
   }
-  if (batch.billing.creditStatus === "settled" && batch.billing.settledMicrocredits !== undefined) {
-    return `Settled: ${formatCredits(batch.billing.settledMicrocredits)}`;
+  if (batch.billing.paymentStatus === "settled" && batch.billing.settledOctas !== undefined) {
+    return `Settled: ${formatApt(batch.billing.settledOctas)}`;
   }
-  if (batch.billing.creditStatus === "payment_required") {
-    return `Payment required: ${formatCredits(batch.billing.reserveMicrocredits)}`;
+  if (batch.billing.paymentStatus === "payment_required") {
+    return `Payment required: ${formatApt(batch.billing.reserveOctas)}`;
   }
-  return `Reserved: ${formatCredits(batch.billing.reserveMicrocredits)}`;
+  return `Reserved: ${formatApt(batch.billing.reserveOctas)}`;
 }
 
 function billingLabel(batch: UploadApiBatchResponse) {
   if (!batch.billing) {
     return "Pending estimate";
   }
-  if (batch.billing.creditStatus === "settled" && batch.billing.settledMicrocredits !== undefined) {
-    return formatCredits(batch.billing.settledMicrocredits);
+  if (batch.billing.paymentStatus === "settled" && batch.billing.settledOctas !== undefined) {
+    return formatApt(batch.billing.settledOctas);
   }
-  return formatCredits(batch.billing.reserveMicrocredits);
+  return formatApt(batch.billing.reserveOctas);
 }
 
 function formatFileCount(count: number) {

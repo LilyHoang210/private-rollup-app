@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Download, FolderUp, PackageCheck, ShieldCheck, UploadCloud } from "lucide-react";
-import { formatCredits, getCreditAccount } from "@/client/api/credits";
-import { estimateReserveMicrocredits } from "@/domain/credits";
+import { formatApt, getAptAccount } from "@/client/api/apt-account";
+import { estimateReserveOctas } from "@/domain/apt";
 import type { FileCategory, RetentionCohort } from "@/domain/files";
 import {
   completeUploadBatch,
@@ -52,13 +52,13 @@ type StorageStatus =
     }
   | { kind: "failed" };
 
-type CreditState =
+type AptState =
   | { kind: "loading" }
   | {
       kind: "ready";
-      balanceMicrocredits: number;
-      reservedMicrocredits: number;
-      availableMicrocredits: number;
+      balanceOctas: number;
+      reservedOctas: number;
+      availableOctas: number;
     }
   | { kind: "failed" };
 
@@ -76,7 +76,7 @@ export function UploadPanel() {
   const [storageStatus, setStorageStatus] = useState<StorageStatus>({
     kind: "loading",
   });
-  const [creditState, setCreditState] = useState<CreditState>({ kind: "loading" });
+  const [aptState, setAptState] = useState<AptState>({ kind: "loading" });
   const [isClosingPack, setIsClosingPack] = useState(false);
   const [vaultMaterial] = useState(() => readLocalVaultPublicMaterial());
 
@@ -84,12 +84,12 @@ export function UploadPanel() {
     () => files.reduce((total, file) => total + file.size, 0),
     [files],
   );
-  const estimatedReserveMicrocredits = useMemo(() => {
+  const estimatedReserveOctas = useMemo(() => {
     if (files.length === 0) {
       return 0;
     }
 
-    return estimateReserveMicrocredits({
+    return estimateReserveOctas({
       ciphertextBytes: selectedSize,
       retentionDays,
     });
@@ -131,20 +131,20 @@ export function UploadPanel() {
   useEffect(() => {
     let active = true;
 
-    void getCreditAccount()
+    void getAptAccount()
       .then(({ account }) => {
         if (active) {
-          setCreditState({
+          setAptState({
             kind: "ready",
-            balanceMicrocredits: account.balanceMicrocredits,
-            reservedMicrocredits: account.reservedMicrocredits,
-            availableMicrocredits: account.availableMicrocredits,
+            balanceOctas: account.balanceOctas,
+            reservedOctas: account.reservedOctas,
+            availableOctas: account.availableOctas,
           });
         }
       })
       .catch(() => {
         if (active) {
-          setCreditState({ kind: "failed" });
+          setAptState({ kind: "failed" });
         }
       });
 
@@ -168,7 +168,7 @@ export function UploadPanel() {
     if (storageStatus.kind !== "ready" || !storageStatus.ready) {
       setState({
         kind: "failed",
-        message: "Shelby storage is not ready. No credit has been charged.",
+        message: "Shelby storage is not ready. No APT has been charged.",
       });
       return;
     }
@@ -374,14 +374,14 @@ export function UploadPanel() {
         {files.length > 0 ? (
           <div className="rounded-lg border border-border bg-surface px-4 py-3 text-sm">
             <p className="font-semibold text-foreground">
-              Estimated reserve: {formatCredits(estimatedReserveMicrocredits)}
+              Estimated reserve: {formatApt(estimatedReserveOctas)}
             </p>
             <p className="mt-1 text-xs text-muted">
               Final pack cost is settled by encrypted bytes after the pack closes.
             </p>
-            {creditState.kind === "ready" ? (
+            {aptState.kind === "ready" ? (
               <p className="mt-1 text-xs text-muted">
-                Available credit: {formatCredits(creditState.availableMicrocredits)}
+                Available APT: {formatApt(aptState.availableOctas)}
               </p>
             ) : null}
           </div>
@@ -425,9 +425,9 @@ export function UploadPanel() {
               </p>
               {state.batch.billing ? (
                 <p className="mt-1 text-sm text-muted">
-                  Reserved credit:{" "}
+                  Reserved APT:{" "}
                   <span className="font-mono text-foreground">
-                    {formatCredits(state.batch.billing.reserveMicrocredits)}
+                    {formatApt(state.batch.billing.reserveOctas)}
                   </span>
                   .
                 </p>

@@ -33,8 +33,8 @@ describe("upload panel", () => {
         if (url.includes("/api/storage/status")) {
           return Response.json(storageReadyFixture());
         }
-        if (url.includes("/api/credits")) {
-          return Response.json(creditFixture());
+        if (url.includes("/api/apt-account")) {
+          return Response.json(aptAccountFixture());
         }
         if (url === "/api/uploads" && init?.method === "POST") {
           return Response.json(uploadFixture("staging"), { status: 201 });
@@ -85,7 +85,7 @@ describe("upload panel", () => {
           mode: "control_plane_only",
         });
       }
-      return Response.json(creditFixture());
+      return Response.json(aptAccountFixture());
     });
 
     render(<UploadPanel />);
@@ -108,7 +108,7 @@ describe("upload panel", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
       if (url.includes("/api/storage/status")) return Response.json(storageReadyFixture());
-      if (url.includes("/api/credits")) return Response.json(creditFixture());
+      if (url.includes("/api/apt-account")) return Response.json(aptAccountFixture());
       return Response.json(
         { message: "Shelby account needs more storage tokens." },
         { status: 502 },
@@ -142,12 +142,17 @@ function storageReadyFixture() {
   };
 }
 
-function creditFixture() {
+function aptAccountFixture() {
   return {
     account: {
-      balanceMicrocredits: 100_000_000,
-      reservedMicrocredits: 0,
-      availableMicrocredits: 100_000_000,
+      balanceOctas: 100_000_000,
+      reservedOctas: 0,
+      availableOctas: 100_000_000,
+      wallet: {
+        address: `0x${"a".repeat(64)}`,
+        network: "testnet",
+        onChainBalanceOctas: 100_000_000,
+      },
       ledger: [],
     },
   };
@@ -159,7 +164,7 @@ function uploadFixture(status: "staging" | "waiting_for_pack") {
     status,
     retentionDays: 90,
     totalCiphertextSizeBytes: 38,
-    billing: { creditStatus: "reserved", reserveMicrocredits: 1_500 },
+    billing: { paymentStatus: "reserved", reserveOctas: 1_500 },
     items: [
       {
         id: "item-1",

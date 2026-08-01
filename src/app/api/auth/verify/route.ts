@@ -6,6 +6,8 @@ import {
   createSessionToken,
   hashSessionToken,
 } from "@/server/auth/session";
+import { hasDatabaseConfiguration } from "@/server/db/client";
+import { ensureDurableCustodialWallet } from "@/server/billing/durable-apt-service";
 
 const verifyRequestSchema = z.object({
   challengeId: z.string().min(1),
@@ -28,6 +30,9 @@ export async function POST(request: Request) {
 
   try {
     const verified = await authService.verifyChallenge(body.data);
+    if (hasDatabaseConfiguration()) {
+      await ensureDurableCustodialWallet(`wallet:${verified.walletAddressHash}`);
+    }
     const sessionMaxAgeSeconds = 7 * 24 * 60 * 60;
     const token = createSessionToken({
       walletAddress: verified.walletAddress,

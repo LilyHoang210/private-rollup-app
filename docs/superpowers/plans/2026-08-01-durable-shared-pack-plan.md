@@ -1,5 +1,7 @@
 # Durable Shared Pack Implementation Plan
 
+> Billing sections in this historical plan are superseded by the real APT custody model in the repository README.
+
 **Goal:** Turn Private Rollup into a durable multi-user service that stages browser-encrypted bytes, closes shared packs, writes verified blobs to Shelby, and settles prepaid credits by each member's encrypted byte contribution.
 
 **Architecture:** The browser encrypts files and uploads only ciphertext directly to a private Vercel Blob store. Postgres is the source of truth for users, credit reservations, upload queue state, packs, memberships, receipts, and worker leases. A protected Vercel Cron route leases eligible uploads by retention cohort, concatenates their encrypted pack bytes, writes one blob through the Shelby service wallet, verifies the on-chain object, allocates cost by bytes, persists byte-range receipts, and deletes temporary staging objects only after durable completion.

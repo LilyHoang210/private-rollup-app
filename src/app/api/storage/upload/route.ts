@@ -99,17 +99,17 @@ export async function POST(request: Request) {
 export function friendlyShelbyError(error: unknown) {
   const raw = error instanceof Error ? error.message : "";
   if (raw.includes("INSUFFICIENT_BALANCE_FOR_TRANSACTION_FEE")) {
-    return "The storage service needs more Shelbynet APT for gas. No credit was charged; please try again after the operator refills it.";
+    return "The storage service needs more Shelbynet APT for gas. No user APT was charged; please try again after the operator refills it.";
   }
   if (/insufficient.*(Shelby|SHEL|USD|token)/i.test(raw)) {
-    return "The storage service needs more Shelbynet storage tokens. No credit was charged; please try again after the operator refills it.";
+    return "The storage service needs more Shelbynet storage tokens. No user APT was charged; please try again after the operator refills it.";
   }
   if (raw.includes("429") || /rate limit/i.test(raw)) {
-    return "Shelby is temporarily rate-limiting uploads. No credit was charged; please try again shortly.";
+    return "Shelby is temporarily rate-limiting uploads. No user APT was charged; please try again shortly.";
   }
   if (/location/i.test(raw)) {
-    return "Shelby could not select a storage location. No credit was charged; the operator must check the location configuration.";
+    return "Shelby could not select a storage location. No user APT was charged; the operator must check the location configuration.";
   }
   if (raw === "Shelby storage writer is not configured") return raw;
-  return "Shelby could not complete and verify this upload. No credit was charged; please try again.";
+  return "Shelby could not complete and verify this upload. No user APT was charged; please try again.";
 }

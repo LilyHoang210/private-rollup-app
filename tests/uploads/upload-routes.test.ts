@@ -6,16 +6,24 @@ import {
   createSessionCookie,
   createSessionToken,
 } from "../../src/server/auth/session";
-import { resetCreditStoreForTests } from "../../src/server/billing/credit-service";
+import {
+  recordWalletDeposit,
+  resetAptStoreForTests,
+} from "../../src/server/billing/apt-account-service";
 import { resetUploadStoreForTests } from "../../src/server/uploads/service";
 
 describe("upload API routes", () => {
   afterEach(() => {
     resetUploadStoreForTests();
-    resetCreditStoreForTests();
+    resetAptStoreForTests();
   });
 
   it("creates, reads, and completes an encrypted upload batch", async () => {
+    recordWalletDeposit({
+      userId: `wallet:${"a".repeat(64)}`,
+      depositId: "route-deposit",
+      amountOctas: 100_000_000,
+    });
     const createResponse = await createUpload(
       new Request("http://localhost/api/uploads", {
         method: "POST",
@@ -45,8 +53,8 @@ describe("upload API routes", () => {
     expect(created.status).toBe("staging");
     expect(created.items[0].packStrategy).toBe("shared_pack");
     expect(created.billing).toMatchObject({
-      creditStatus: "reserved",
-      reserveMicrocredits: expect.any(Number),
+      paymentStatus: "reserved",
+      reserveOctas: expect.any(Number),
     });
 
     const getResponse = await getUpload(
@@ -81,8 +89,8 @@ describe("upload API routes", () => {
       id: created.id,
       status: "waiting_for_pack",
       billing: {
-        creditStatus: "reserved",
-        reserveMicrocredits: created.billing.reserveMicrocredits,
+        paymentStatus: "reserved",
+        reserveOctas: created.billing.reserveOctas,
       },
     });
 
@@ -98,8 +106,8 @@ describe("upload API routes", () => {
           id: created.id,
           status: "waiting_for_pack",
           billing: {
-            creditStatus: "reserved",
-            reserveMicrocredits: created.billing.reserveMicrocredits,
+            paymentStatus: "reserved",
+            reserveOctas: created.billing.reserveOctas,
           },
           items: [{ label: "Passport scan" }],
         },

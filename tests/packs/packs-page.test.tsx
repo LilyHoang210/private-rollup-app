@@ -35,8 +35,8 @@ describe("packs page", () => {
             retentionDays: 30,
             totalCiphertextSizeBytes: 115,
             billing: {
-              creditStatus: "reserved",
-              reserveMicrocredits: 25_000,
+              paymentStatus: "reserved",
+              reserveOctas: 25_000,
             },
             createdAt: "2026-08-01T07:15:00.000Z",
             updatedAt: "2026-08-01T07:15:01.000Z",
@@ -67,7 +67,7 @@ describe("packs page", () => {
     expect(screen.getByText("Waiting for pack")).toBeVisible();
     expect(screen.getByText("Shared pack")).toBeVisible();
     expect(screen.getByText("30 days")).toBeVisible();
-    expect(screen.getByText("0.025000 credits")).toBeVisible();
+    expect(screen.getByText("0.00025 APT")).toBeVisible();
   });
 
   it("filters pack rows by search text", async () => {
@@ -129,8 +129,8 @@ function batchFixture(id: string, label: string, totalCiphertextSizeBytes: numbe
     retentionDays: 90,
     totalCiphertextSizeBytes,
     billing: {
-      creditStatus: "reserved",
-      reserveMicrocredits: totalCiphertextSizeBytes * 10,
+      paymentStatus: "reserved",
+      reserveOctas: totalCiphertextSizeBytes * 10,
     },
     createdAt: id === "batch-large" ? "2026-08-01T07:16:00.000Z" : "2026-08-01T07:15:00.000Z",
     updatedAt: "2026-08-01T07:15:01.000Z",

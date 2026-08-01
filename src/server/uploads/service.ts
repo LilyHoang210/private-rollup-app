@@ -10,10 +10,10 @@ import type { UploadStatus } from "@/domain/uploads";
 import { DomainError } from "@/domain/errors";
 import {
   getUploadBilling,
-  releaseUploadCredit,
-  reserveUploadCredit,
+  releaseUploadApt,
+  reserveUploadApt,
   type UploadBillingRecord,
-} from "@/server/billing/credit-service";
+} from "@/server/billing/apt-account-service";
 import type { ShelbyWriteReceipt } from "@/server/storage/shelby-writer";
 
 export interface CreateUploadItemInput {
@@ -92,7 +92,7 @@ export function markUploadBatchAvailable(input: {
 export function failUploadBatch(input: { userId: string; batchId: string }) {
   const batch = requireBatch(input.batchId, input.userId);
   markBatchFailed(batch);
-  releaseUploadCredit(input.userId, input.batchId);
+  releaseUploadApt(input.userId, input.batchId);
   return cloneBatch(batch);
 }
 
@@ -120,7 +120,7 @@ export function createUploadBatch(input: CreateUploadBatchInput): UploadBatchRec
     (total, item) => total + item.ciphertextSizeBytes,
     0,
   );
-  const billing = reserveUploadCredit({
+  const billing = reserveUploadApt({
     userId: input.userId,
     uploadId: batchId,
     ciphertextBytes: totalCiphertextSizeBytes,

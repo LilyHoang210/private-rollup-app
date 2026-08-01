@@ -2,8 +2,8 @@ import type { RetentionCohort } from "./files";
 import { parseRetentionCohort } from "./files";
 import { DomainError } from "./errors";
 
-export const MICROCREDITS_PER_CREDIT = 1_000_000;
-const BASE_MICROCREDITS_PER_KIB_30_DAYS = 500;
+export const OCTAS_PER_APT = 100_000_000;
+const BASE_OCTAS_PER_KIB_30_DAYS = 500;
 
 export interface EstimateReserveInput {
   ciphertextBytes: number;
@@ -11,33 +11,27 @@ export interface EstimateReserveInput {
 }
 
 export interface AllocatePackCostInput {
-  totalCostMicrocredits: number;
-  members: Array<{
-    memberId: string;
-    ciphertextBytes: number;
-  }>;
+  totalCostOctas: number;
+  members: Array<{ memberId: string; ciphertextBytes: number }>;
 }
 
 export interface PackCostAllocation {
   memberId: string;
-  costMicrocredits: number;
+  costOctas: number;
 }
 
-export function estimateReserveMicrocredits(input: EstimateReserveInput) {
+export function estimateReserveOctas(input: EstimateReserveInput) {
   assertSafeNonNegativeInteger(input.ciphertextBytes, "Ciphertext bytes");
   const retentionDays = parseRetentionCohort(input.retentionDays);
   const kib = Math.max(1, Math.ceil(input.ciphertextBytes / 1024));
-  return Math.ceil(
-    kib * BASE_MICROCREDITS_PER_KIB_30_DAYS * (retentionDays / 30),
-  );
+  return Math.ceil(kib * BASE_OCTAS_PER_KIB_30_DAYS * (retentionDays / 30));
 }
 
-export function allocatePackCostByBytes(
+export function allocatePackCostOctasByBytes(
   input: AllocatePackCostInput,
 ): PackCostAllocation[] {
-  assertSafeNonNegativeInteger(input.totalCostMicrocredits, "Pack cost");
-
-  if (!Array.isArray(input.members) || input.members.length === 0) {
+  assertSafeNonNegativeInteger(input.totalCostOctas, "Pack cost");
+  if (input.members.length === 0) {
     throw new DomainError("Pack members are required", "PACK_MEMBERS_REQUIRED");
   }
 
@@ -48,7 +42,6 @@ export function allocatePackCostByBytes(
     }
     return total + member.ciphertextBytes;
   }, 0);
-
   if (totalBytes <= 0) {
     throw new DomainError(
       "Pack ciphertext bytes must be greater than zero",
@@ -56,55 +49,66 @@ export function allocatePackCostByBytes(
     );
   }
 
-  const totalCost = BigInt(input.totalCostMicrocredits);
+  const totalCost = BigInt(input.totalCostOctas);
   const totalBytesBigInt = BigInt(totalBytes);
   const allocations = input.members.map((member, index) => {
-    const exactNumerator = totalCost * BigInt(member.ciphertextBytes);
-    const baseCost = Number(exactNumerator / totalBytesBigInt);
-    const remainder = Number(exactNumerator % totalBytesBigInt);
-
+    const numerator = totalCost * BigInt(member.ciphertextBytes);
     return {
       index,
       memberId: member.memberId,
       ciphertextBytes: member.ciphertextBytes,
-      costMicrocredits: baseCost,
-      remainder,
+      costOctas: Number(numerator / totalBytesBigInt),
+      remainder: Number(numerator % totalBytesBigInt),
     };
   });
 
-  let remainderToDistribute =
-    input.totalCostMicrocredits -
-    allocations.reduce((total, allocation) => total + allocation.costMicrocredits, 0);
-
+  let remainder =
+    input.totalCostOctas -
+    allocations.reduce((total, allocation) => total + allocation.costOctas, 0);
   for (const allocation of [...allocations].sort(compareRemainders)) {
-    if (remainderToDistribute <= 0) {
-      break;
-    }
-    allocation.costMicrocredits += 1;
-    remainderToDistribute -= 1;
+    if (remainder <= 0) break;
+    allocation.costOctas += 1;
+    remainder -= 1;
   }
 
   return allocations
     .sort((left, right) => left.index - right.index)
-    .map(({ costMicrocredits, memberId }) => ({ memberId, costMicrocredits }));
+    .map(({ costOctas, memberId }) => ({ memberId, costOctas }));
 }
 
-export function formatCredits(microcredits: number) {
-  assertSafeNonNegativeInteger(Math.abs(microcredits), "Credit amount");
-  const sign = microcredits < 0 ? "-" : "";
-  const absolute = Math.abs(microcredits);
-  const credits = Math.floor(absolute / MICROCREDITS_PER_CREDIT);
-  const fractional = String(absolute % MICROCREDITS_PER_CREDIT).padStart(6, "0");
-  return `${sign}${credits}.${fractional} credits`;
+export function formatApt(octas: number) {
+  assertSafeNonNegativeInteger(Math.abs(octas), "APT amount");
+  const sign = octas < 0 ? "-" : "";
+  const absolute = Math.abs(octas);
+  const whole = Math.floor(absolute / OCTAS_PER_APT);
+  const fractional = String(absolute % OCTAS_PER_APT)
+    .padStart(8, "0")
+    .replace(/0+$/, "");
+  return `${sign}${whole}${fractional ? `.${fractional}` : ""} APT`;
+}
+
+export function parseAptToOctas(value: string) {
+  const normalized = value.trim();
+  if (!/^(?:0|[1-9]\d*)(?:\.\d{1,8})?$/.test(normalized)) {
+    throw new DomainError(
+      "APT amount must use at most 8 decimal places",
+      "APT_AMOUNT_INVALID",
+    );
+  }
+  const [whole, fractional = ""] = normalized.split(".");
+  const octas = Number(
+    BigInt(whole) * BigInt(OCTAS_PER_APT) +
+      BigInt(fractional.padEnd(8, "0")),
+  );
+  assertSafeNonNegativeInteger(octas, "APT amount");
+  return octas;
 }
 
 function compareRemainders(
   left: { remainder: number; ciphertextBytes: number; index: number },
   right: { remainder: number; ciphertextBytes: number; index: number },
 ) {
-  if (right.remainder !== left.remainder) {
-    return right.remainder - left.remainder;
-  }
+  if (right.remainder !== left.remainder) return right.remainder - left.remainder;
   if (right.ciphertextBytes !== left.ciphertextBytes) {
     return right.ciphertextBytes - left.ciphertextBytes;
   }
@@ -115,7 +119,7 @@ function assertSafeNonNegativeInteger(value: number, label: string) {
   if (!Number.isSafeInteger(value) || value < 0) {
     throw new DomainError(
       `${label} must be a non-negative integer`,
-      "CREDIT_AMOUNT_INVALID",
+      "APT_AMOUNT_INVALID",
     );
   }
 }

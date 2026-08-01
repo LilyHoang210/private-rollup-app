@@ -2,7 +2,6 @@ import { hasDatabaseConfiguration } from "@/server/db/client";
 import {
   completeDurableUploadBatch,
   createDurableUploadBatch,
-  getDurableCreditAccount,
   getDurableUploadBatch,
   listDurableUploadBatchesForUser,
   type CompleteDurableUploadBatchInput,
@@ -14,7 +13,8 @@ import {
   listUploadBatchesForUser,
   type CreateUploadBatchInput,
 } from "./service";
-import { getCreditAccount } from "@/server/billing/credit-service";
+import { getAptAccount } from "@/server/billing/apt-account-service";
+import { getDurableAptAccount } from "@/server/billing/durable-apt-service";
 
 export async function createUploadBatchRuntime(input: CreateUploadBatchInput) {
   assertProductionDatabase();
@@ -54,11 +54,11 @@ export async function listUploadBatchesForUserRuntime(userId: string) {
     : listUploadBatchesForUser(userId);
 }
 
-export async function getCreditAccountRuntime(userId: string) {
+export async function getAptAccountRuntime(userId: string) {
   assertProductionDatabase();
   return hasDatabaseConfiguration()
-    ? getDurableCreditAccount(userId)
-    : getCreditAccount(userId);
+    ? getDurableAptAccount(userId)
+    : getAptAccount(userId);
 }
 
 function assertProductionDatabase() {

@@ -1,36 +1,49 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Private Rollup
 
-## Getting Started
+Private Rollup is an English-only web application for browser-encrypted uploads
+that share Shelby blobs without sharing plaintext. Each authenticated user gets
+an isolated Aptos Testnet service wallet. Users deposit real Testnet APT, the app
+reserves APT while a pack is open, and the final storage charge is allocated by
+each member's ciphertext bytes.
 
-First, run the development server:
+## Money and custody model
+
+- The displayed balance is denominated in APT; the database stores integer octas.
+- There are no app credits, promotional grants, or unbacked balances.
+- A unique deposit wallet is generated after wallet authentication.
+- Its signing key is encrypted with AES-256-GCM before it reaches Postgres.
+- Deposits are detected from the wallet's Aptos Testnet balance.
+- Only available APT can be withdrawn. APT reserved for an open pack cannot be
+  withdrawn until settlement or release.
+- Withdrawals return APT only to the wallet in the signed login session.
+- A service fee payer sponsors withdrawal gas so the requested available amount
+  is not reduced by gas.
+
+Shelby uploads are still signed by the shared Shelby service wallet because a
+combined blob has one on-chain owner. Browser plaintext and file keys never reach
+the server.
+
+## Local setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
+pnpm db:migrate
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Copy `.env.example` to `.env.local` and configure Postgres, private Vercel Blob,
+Shelby, authentication, and these custody secrets:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `CUSTODIAL_WALLET_MASTER_KEY`: exactly 32 random bytes encoded as base64.
+- `APTOS_FEE_PAYER_PRIVATE_KEY`: an Aptos Testnet Ed25519 private key funded with
+  enough Testnet APT to sponsor withdrawals.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Verification
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+pnpm test
+pnpm lint
+pnpm typecheck
+pnpm build:cli
+pnpm build
+```

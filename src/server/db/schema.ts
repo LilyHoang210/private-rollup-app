@@ -225,41 +225,67 @@ export const packs = pgTable(
   ],
 );
 
-export const creditStatusEnum = pgEnum("credit_status", [
+export const paymentStatusEnum = pgEnum("payment_status", [
   "reserved",
   "settled",
   "payment_required",
 ]);
 
-export const creditLedgerEntryTypeEnum = pgEnum("credit_ledger_entry_type", [
+export const aptLedgerEntryTypeEnum = pgEnum("apt_ledger_entry_type", [
   "testnet_grant",
+  "wallet_deposit",
   "upload_reserve",
   "upload_release",
   "pack_settlement",
+  "withdrawal",
 ]);
 
-export const creditAccounts = pgTable("credit_accounts", {
+export const aptAccounts = pgTable("apt_accounts", {
   userId: uuid("user_id")
     .primaryKey()
     .references(() => users.id),
-  balanceMicrocredits: bigint("balance_microcredits", { mode: "number" }).notNull(),
-  reservedMicrocredits: bigint("reserved_microcredits", { mode: "number" }).notNull(),
+  balanceOctas: bigint("balance_octas", { mode: "number" }).notNull(),
+  reservedOctas: bigint("reserved_octas", { mode: "number" }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const custodialWallets = pgTable(
+  "custodial_wallets",
+  {
+    userId: uuid("user_id")
+      .primaryKey()
+      .references(() => users.id),
+    address: text("address").notNull(),
+    network: text("network").notNull(),
+    encryptedSigningMaterial: text("encrypted_signing_material").notNull(),
+    totalDepositedOctas: bigint("total_deposited_octas", { mode: "number" })
+      .notNull()
+      .default(0),
+    lastObservedBalanceOctas: bigint("last_observed_balance_octas", {
+      mode: "number",
+    })
+      .notNull()
+      .default(0),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("custodial_wallets_address_unique").on(table.address)],
+);
 
 export const uploadBillings = pgTable("upload_billings", {
   uploadBatchId: uuid("upload_batch_id")
     .primaryKey()
     .references(() => uploadBatches.id),
-  reserveMicrocredits: bigint("reserve_microcredits", { mode: "number" }).notNull(),
-  settledMicrocredits: bigint("settled_microcredits", { mode: "number" }),
-  creditStatus: creditStatusEnum("credit_status").notNull(),
+  reserveOctas: bigint("reserve_octas", { mode: "number" }).notNull(),
+  settledOctas: bigint("settled_octas", { mode: "number" }),
+  paymentStatus: paymentStatusEnum("payment_status").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const creditLedger = pgTable(
-  "credit_ledger",
+export const aptLedger = pgTable(
+  "apt_ledger",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id")
@@ -267,17 +293,18 @@ export const creditLedger = pgTable(
       .references(() => users.id),
     uploadBatchId: uuid("upload_batch_id").references(() => uploadBatches.id),
     packId: uuid("pack_id").references(() => packs.id),
-    type: creditLedgerEntryTypeEnum("type").notNull(),
-    amountMicrocredits: bigint("amount_microcredits", { mode: "number" }).notNull(),
-    reservedDeltaMicrocredits: bigint("reserved_delta_microcredits", {
+    type: aptLedgerEntryTypeEnum("type").notNull(),
+    amountOctas: bigint("amount_octas", { mode: "number" }).notNull(),
+    reservedDeltaOctas: bigint("reserved_delta_octas", {
       mode: "number",
     }).notNull(),
+    transactionHash: text("transaction_hash"),
     idempotencyKey: text("idempotency_key").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex("credit_ledger_idempotency_unique").on(table.idempotencyKey),
-    index("credit_ledger_user_created_idx").on(table.userId, table.createdAt),
+    uniqueIndex("apt_ledger_idempotency_unique").on(table.idempotencyKey),
+    index("apt_ledger_user_created_idx").on(table.userId, table.createdAt),
   ],
 );
 
@@ -378,9 +405,10 @@ export const schemaTables = {
   uploadBatches,
   uploadItems,
   packs,
-  creditAccounts,
+  aptAccounts,
+  custodialWallets,
   uploadBillings,
-  creditLedger,
+  aptLedger,
   packMembers,
   receipts,
   jobs,

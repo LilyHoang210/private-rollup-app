@@ -2,14 +2,14 @@ import { createHash, randomUUID } from "node:crypto";
 import { del, get } from "@vercel/blob";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import {
-  allocatePackCostByBytes,
-  estimateReserveMicrocredits,
-} from "@/domain/credits";
+  allocatePackCostOctasByBytes,
+  estimateReserveOctas,
+} from "@/domain/apt";
 import type { RetentionCohort } from "@/domain/files";
 import { getDatabase } from "@/server/db/client";
 import {
-  creditAccounts,
-  creditLedger,
+  aptAccounts,
+  aptLedger,
   packMembers,
   packs,
   uploadBatches,
@@ -122,12 +122,12 @@ export async function closeEligiblePack(input: {
       sha256: assembled.sha256,
       retentionDays,
     });
-    const totalCostMicrocredits = estimateReserveMicrocredits({
+    const totalCostOctas = estimateReserveOctas({
       ciphertextBytes: assembled.bytes.byteLength,
       retentionDays,
     });
-    const allocations = allocatePackCostByBytes({
-      totalCostMicrocredits,
+    const allocations = allocatePackCostOctasByBytes({
+      totalCostOctas,
       members: assembled.members.map((member) => ({
         memberId: member.batchId,
         ciphertextBytes: member.byteLength,
@@ -175,7 +175,7 @@ export async function closeEligiblePack(input: {
           batchId: batch.id,
           userId: batch.userId,
           packId,
-          costMicrocredits: allocation.costMicrocredits,
+          costOctas: allocation.costOctas,
         });
         await tx
           .update(uploadBatches)
@@ -220,51 +220,51 @@ async function settleBatch(
     batchId: string;
     userId: string;
     packId: string;
-    costMicrocredits: number;
+    costOctas: number;
   },
 ) {
   const [billing, account] = await Promise.all([
     tx.query.uploadBillings.findFirst({
       where: eq(uploadBillings.uploadBatchId, input.batchId),
     }),
-    tx.query.creditAccounts.findFirst({
-      where: eq(creditAccounts.userId, input.userId),
+    tx.query.aptAccounts.findFirst({
+      where: eq(aptAccounts.userId, input.userId),
     }),
   ]);
   if (!billing || !account) throw new Error("Pack member billing state is missing");
 
   const spendableIncludingOwnReserve =
-    account.balanceMicrocredits -
-    Math.max(0, account.reservedMicrocredits - billing.reserveMicrocredits);
-  const settled = spendableIncludingOwnReserve >= input.costMicrocredits;
+    account.balanceOctas -
+    Math.max(0, account.reservedOctas - billing.reserveOctas);
+  const settled = spendableIncludingOwnReserve >= input.costOctas;
   await tx
     .update(uploadBillings)
     .set({
-      creditStatus: settled ? "settled" : "payment_required",
-      settledMicrocredits: settled ? input.costMicrocredits : null,
+      paymentStatus: settled ? "settled" : "payment_required",
+      settledOctas: settled ? input.costOctas : null,
       updatedAt: new Date(),
     })
     .where(eq(uploadBillings.uploadBatchId, input.batchId));
   if (!settled) return;
 
   await tx
-    .update(creditAccounts)
+    .update(aptAccounts)
     .set({
-      balanceMicrocredits: account.balanceMicrocredits - input.costMicrocredits,
-      reservedMicrocredits: Math.max(
+      balanceOctas: account.balanceOctas - input.costOctas,
+      reservedOctas: Math.max(
         0,
-        account.reservedMicrocredits - billing.reserveMicrocredits,
+        account.reservedOctas - billing.reserveOctas,
       ),
       updatedAt: new Date(),
     })
-    .where(eq(creditAccounts.userId, input.userId));
-  await tx.insert(creditLedger).values({
+    .where(eq(aptAccounts.userId, input.userId));
+  await tx.insert(aptLedger).values({
     userId: input.userId,
     uploadBatchId: input.batchId,
     packId: input.packId,
     type: "pack_settlement",
-    amountMicrocredits: -input.costMicrocredits,
-    reservedDeltaMicrocredits: -billing.reserveMicrocredits,
+    amountOctas: -input.costOctas,
+    reservedDeltaOctas: -billing.reserveOctas,
     idempotencyKey: `pack-settlement:${input.packId}:${input.batchId}`,
   });
 }

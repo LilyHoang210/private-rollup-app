@@ -7,15 +7,13 @@ import {
   parseRetentionCohort,
   selectPackStrategy,
 } from "@/domain/files";
-import { estimateReserveMicrocredits } from "@/domain/credits";
+import { estimateReserveOctas } from "@/domain/apt";
 import { DomainError } from "@/domain/errors";
 import type { UploadStatus } from "@/domain/uploads";
-import type { CreditAccount } from "@/server/billing/credit-service";
-import { TESTNET_GRANT_MICROCREDITS } from "@/server/billing/credit-service";
 import { getDatabase } from "@/server/db/client";
 import {
-  creditAccounts,
-  creditLedger,
+  aptAccounts,
+  aptLedger,
   packMembers,
   packs,
   uploadBatches,
@@ -64,16 +62,16 @@ export async function createDurableUploadBatch(
       (total, item) => total + item.ciphertextSizeBytes,
       0,
     );
-    const reserveMicrocredits = estimateReserveMicrocredits({
+    const reserveOctas = estimateReserveOctas({
       ciphertextBytes: totalCiphertextBytes,
       retentionDays,
     });
-    const account = await ensureCreditAccount(tx, user.id);
-    const available = account.balanceMicrocredits - account.reservedMicrocredits;
-    if (available < reserveMicrocredits) {
+    const account = await ensureAptAccount(tx, user.id);
+    const available = account.balanceOctas - account.reservedOctas;
+    if (available < reserveOctas) {
       throw new DomainError(
-        "Insufficient credit for upload reserve",
-        "CREDIT_INSUFFICIENT",
+        "Insufficient available APT for this upload",
+        "APT_INSUFFICIENT",
       );
     }
 
@@ -113,22 +111,22 @@ export async function createDurableUploadBatch(
     );
     await tx.insert(uploadBillings).values({
       uploadBatchId: batchId,
-      reserveMicrocredits,
-      creditStatus: "reserved",
+      reserveOctas,
+      paymentStatus: "reserved",
     });
     await tx
-      .update(creditAccounts)
+      .update(aptAccounts)
       .set({
-        reservedMicrocredits: account.reservedMicrocredits + reserveMicrocredits,
+        reservedOctas: account.reservedOctas + reserveOctas,
         updatedAt: new Date(),
       })
-      .where(eq(creditAccounts.userId, user.id));
-    await tx.insert(creditLedger).values({
+      .where(eq(aptAccounts.userId, user.id));
+    await tx.insert(aptLedger).values({
       userId: user.id,
       uploadBatchId: batchId,
       type: "upload_reserve",
-      amountMicrocredits: 0,
-      reservedDeltaMicrocredits: reserveMicrocredits,
+      amountOctas: 0,
+      reservedDeltaOctas: reserveOctas,
       idempotencyKey: `upload-reserve:${batchId}`,
     });
   });
@@ -198,35 +196,13 @@ export async function listDurableUploadBatchesForUser(userId: string) {
   return Promise.all(batches.map(loadBatchRecord));
 }
 
-export async function getDurableCreditAccount(userId: string): Promise<CreditAccount> {
+export async function ensureDurableIdentity(userId: string) {
   const db = getDatabase();
-  const user = await db.transaction((tx) => ensureUser(tx, userId));
-  await db.transaction((tx) => ensureCreditAccount(tx, user.id));
-  const [account, ledger] = await Promise.all([
-    db.query.creditAccounts.findFirst({ where: eq(creditAccounts.userId, user.id) }),
-    db.query.creditLedger.findMany({
-      where: eq(creditLedger.userId, user.id),
-      orderBy: [desc(creditLedger.createdAt)],
-      limit: 100,
-    }),
-  ]);
-  if (!account) throw new Error("Durable credit account was not created");
-  return {
-    userId,
-    balanceMicrocredits: account.balanceMicrocredits,
-    reservedMicrocredits: account.reservedMicrocredits,
-    availableMicrocredits:
-      account.balanceMicrocredits - account.reservedMicrocredits,
-    ledger: ledger.map((entry) => ({
-      id: entry.id,
-      type: entry.type,
-      amountMicrocredits: entry.amountMicrocredits,
-      reservedDeltaMicrocredits: entry.reservedDeltaMicrocredits,
-      uploadId: entry.uploadBatchId ?? undefined,
-      packId: entry.packId ?? undefined,
-      createdAt: entry.createdAt.toISOString(),
-    })),
-  };
+  return db.transaction(async (tx) => {
+    const user = await ensureUser(tx, userId);
+    await ensureAptAccount(tx, user.id);
+    return user;
+  });
 }
 
 async function findByIdempotencyKey(userId: string, idempotencyKey: string) {
@@ -306,9 +282,9 @@ async function loadBatchRecord(batch: typeof uploadBatches.$inferSelect) {
     billing: billing
       ? {
           uploadId: batch.id,
-          reserveMicrocredits: billing.reserveMicrocredits,
-          settledMicrocredits: billing.settledMicrocredits ?? undefined,
-          creditStatus: billing.creditStatus,
+          reserveOctas: billing.reserveOctas,
+          settledOctas: billing.settledOctas ?? undefined,
+          paymentStatus: billing.paymentStatus,
         }
       : undefined,
     storage,
@@ -367,32 +343,22 @@ async function ensureUser(
   return raced;
 }
 
-async function ensureCreditAccount(
+async function ensureAptAccount(
   tx: Parameters<Parameters<ReturnType<typeof getDatabase>["transaction"]>[0]>[0],
   userId: string,
 ) {
   await tx
-    .insert(creditAccounts)
+    .insert(aptAccounts)
     .values({
       userId,
-      balanceMicrocredits: TESTNET_GRANT_MICROCREDITS,
-      reservedMicrocredits: 0,
+      balanceOctas: 0,
+      reservedOctas: 0,
     })
-    .onConflictDoNothing({ target: creditAccounts.userId });
-  await tx
-    .insert(creditLedger)
-    .values({
-      userId,
-      type: "testnet_grant",
-      amountMicrocredits: TESTNET_GRANT_MICROCREDITS,
-      reservedDeltaMicrocredits: 0,
-      idempotencyKey: `testnet-grant:${userId}`,
-    })
-    .onConflictDoNothing({ target: creditLedger.idempotencyKey });
-  const account = await tx.query.creditAccounts.findFirst({
-    where: eq(creditAccounts.userId, userId),
+    .onConflictDoNothing({ target: aptAccounts.userId });
+  const account = await tx.query.aptAccounts.findFirst({
+    where: eq(aptAccounts.userId, userId),
   });
-  if (!account) throw new Error("Could not create durable credit account");
+  if (!account) throw new Error("Could not create durable APT account");
   return account;
 }
 

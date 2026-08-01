@@ -24,9 +24,9 @@ export interface UploadApiItemResponse extends UploadApiItemInput {
 }
 
 export interface UploadBillingResponse {
-  reserveMicrocredits: number;
-  settledMicrocredits?: number;
-  creditStatus: "reserved" | "settled" | "payment_required";
+  reserveOctas: number;
+  settledOctas?: number;
+  paymentStatus: "reserved" | "settled" | "payment_required";
 }
 
 export interface UploadApiBatchResponse {

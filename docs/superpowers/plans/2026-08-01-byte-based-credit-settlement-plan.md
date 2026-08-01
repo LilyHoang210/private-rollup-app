@@ -1,5 +1,7 @@
 # Byte-Based Credit Settlement Implementation Plan
 
+> Superseded on 2026-08-01. This file is retained only as implementation history; the live product uses real APT and octas as documented in the repository README.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add prepaid credit accounting where uploads reserve estimated credit and closed packs settle real costs by each user's encrypted byte contribution.

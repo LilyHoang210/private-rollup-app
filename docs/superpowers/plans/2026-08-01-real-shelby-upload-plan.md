@@ -2,7 +2,9 @@
 
 **Goal:** Replace metadata-only demo uploads with recoverable client-side encryption and a server-paid Shelby upload that can be independently verified.
 
-**Approved product model:** Users prepay app credits. The browser encrypts files. A service account pays APT and Shelby storage fees. Billing is proportional to ciphertext bytes. Private keys and plaintext never reach the server.
+> Superseded on 2026-08-01 by the custodial APT model documented in the repository README. The application no longer issues or displays internal credits.
+
+**Historical product model:** Users prepaid app credits. The browser encrypts files. A service account pays APT and Shelby storage fees. Billing is proportional to ciphertext bytes. Private keys and plaintext never reach the server.
 
 ## Scope for this release
 
