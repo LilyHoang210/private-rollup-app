@@ -6,6 +6,7 @@ import {
   listUploadBatchesForUser,
   resetUploadStoreForTests,
 } from "../../src/server/uploads/service";
+import { resetCreditStoreForTests } from "../../src/server/billing/credit-service";
 
 describe("upload service", () => {
   const baseItem = {
@@ -22,6 +23,7 @@ describe("upload service", () => {
 
   afterEach(() => {
     resetUploadStoreForTests();
+    resetCreditStoreForTests();
   });
 
   it("creates idempotent batches and assigns pack strategy per item size", () => {
@@ -66,6 +68,25 @@ describe("upload service", () => {
         items: [{ ...baseItem, plaintextBytes: "leak" } as typeof baseItem],
       }),
     ).toThrow("Plaintext payload fields are not accepted");
+  });
+
+  it("does not retain a batch when credit reserve fails", () => {
+    expect(() =>
+      createUploadBatch({
+        userId: "demo-user",
+        idempotencyKey: "idem-insufficient-credit",
+        retentionDays: 365,
+        items: [
+          {
+            ...baseItem,
+            ciphertextSizeBytes: 512 * 1024 * 1024,
+            ciphertextSha256: "d".repeat(64),
+          },
+        ],
+      }),
+    ).toThrow("Insufficient credit for upload reserve");
+
+    expect(listUploadBatchesForUser("demo-user")).toEqual([]);
   });
 
   it("completes staging only when ciphertext checksums match", () => {

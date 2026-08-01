@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { FolderUp, ShieldCheck, UploadCloud } from "lucide-react";
+import { formatCredits, getCreditAccount } from "@/client/api/credits";
+import { estimateReserveMicrocredits } from "@/domain/credits";
 import type { FileCategory, RetentionCohort } from "@/domain/files";
 import {
   completeUploadBatch,
@@ -41,6 +43,16 @@ type StorageStatus =
     }
   | { kind: "failed" };
 
+type CreditState =
+  | { kind: "loading" }
+  | {
+      kind: "ready";
+      balanceMicrocredits: number;
+      reservedMicrocredits: number;
+      availableMicrocredits: number;
+    }
+  | { kind: "failed" };
+
 export function UploadPanel() {
   const [files, setFiles] = useState<File[]>([]);
   const [label, setLabel] = useState("");
@@ -55,11 +67,22 @@ export function UploadPanel() {
   const [storageStatus, setStorageStatus] = useState<StorageStatus>({
     kind: "loading",
   });
+  const [creditState, setCreditState] = useState<CreditState>({ kind: "loading" });
 
   const selectedSize = useMemo(
     () => files.reduce((total, file) => total + file.size, 0),
     [files],
   );
+  const estimatedReserveMicrocredits = useMemo(() => {
+    if (files.length === 0) {
+      return 0;
+    }
+
+    return estimateReserveMicrocredits({
+      ciphertextBytes: selectedSize,
+      retentionDays,
+    });
+  }, [files.length, retentionDays, selectedSize]);
 
   useEffect(() => {
     let active = true;
@@ -86,6 +109,31 @@ export function UploadPanel() {
       .catch(() => {
         if (active) {
           setStorageStatus({ kind: "failed" });
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    void getCreditAccount()
+      .then(({ account }) => {
+        if (active) {
+          setCreditState({
+            kind: "ready",
+            balanceMicrocredits: account.balanceMicrocredits,
+            reservedMicrocredits: account.reservedMicrocredits,
+            availableMicrocredits: account.availableMicrocredits,
+          });
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setCreditState({ kind: "failed" });
         }
       });
 
@@ -239,6 +287,22 @@ export function UploadPanel() {
           </p>
         </div>
 
+        {files.length > 0 ? (
+          <div className="rounded-lg border border-border bg-surface px-4 py-3 text-sm">
+            <p className="font-semibold text-foreground">
+              Estimated reserve: {formatCredits(estimatedReserveMicrocredits)}
+            </p>
+            <p className="mt-1 text-xs text-muted">
+              Final pack cost is settled by encrypted bytes after the pack closes.
+            </p>
+            {creditState.kind === "ready" ? (
+              <p className="mt-1 text-xs text-muted">
+                Available credit: {formatCredits(creditState.availableMicrocredits)}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
         <button
           data-action="upload.encrypt_queue"
           type="button"
@@ -275,6 +339,15 @@ export function UploadPanel() {
                 <span className="font-mono text-foreground">{state.batch.status}</span>.
                 Items are ready for pack selection.
               </p>
+              {state.batch.billing ? (
+                <p className="mt-1 text-sm text-muted">
+                  Reserved credit:{" "}
+                  <span className="font-mono text-foreground">
+                    {formatCredits(state.batch.billing.reserveMicrocredits)}
+                  </span>
+                  .
+                </p>
+              ) : null}
               <p className="mt-1 text-sm text-muted">
                 {storageStatus.kind === "ready" && storageStatus.ready
                   ? "Storage writer configuration is present, but this UI only reports a chain write after a real transaction hash is returned."

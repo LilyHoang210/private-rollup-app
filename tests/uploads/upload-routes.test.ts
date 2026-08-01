@@ -6,11 +6,13 @@ import {
   createSessionCookie,
   createSessionToken,
 } from "../../src/server/auth/session";
+import { resetCreditStoreForTests } from "../../src/server/billing/credit-service";
 import { resetUploadStoreForTests } from "../../src/server/uploads/service";
 
 describe("upload API routes", () => {
   afterEach(() => {
     resetUploadStoreForTests();
+    resetCreditStoreForTests();
   });
 
   it("creates, reads, and completes an encrypted upload batch", async () => {
@@ -42,6 +44,10 @@ describe("upload API routes", () => {
     expect(createResponse.status).toBe(201);
     expect(created.status).toBe("staging");
     expect(created.items[0].packStrategy).toBe("shared_pack");
+    expect(created.billing).toMatchObject({
+      creditStatus: "reserved",
+      reserveMicrocredits: expect.any(Number),
+    });
 
     const getResponse = await getUpload(
       new Request(`http://localhost/api/uploads/${created.id}`, {
@@ -76,6 +82,10 @@ describe("upload API routes", () => {
     await expect(completeResponse.json()).resolves.toMatchObject({
       id: created.id,
       status: "waiting_for_pack",
+      billing: {
+        creditStatus: "reserved",
+        reserveMicrocredits: created.billing.reserveMicrocredits,
+      },
     });
 
     const listResponse = await listUploads(
@@ -89,6 +99,10 @@ describe("upload API routes", () => {
         {
           id: created.id,
           status: "waiting_for_pack",
+          billing: {
+            creditStatus: "reserved",
+            reserveMicrocredits: created.billing.reserveMicrocredits,
+          },
           items: [{ label: "Passport scan" }],
         },
       ],

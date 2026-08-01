@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { formatCredits } from "@/client/api/credits";
 import type { UploadApiBatchResponse } from "@/client/api/uploads";
 import { listUploadBatches } from "@/client/api/uploads";
 import {
@@ -131,7 +132,7 @@ export function PacksUploadActivity() {
           {visibleBatches.map((batch) => (
             <article
               key={batch.id}
-              className="grid gap-4 p-5 md:grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr]"
+              className="grid gap-4 p-5 md:grid-cols-[1.2fr_0.7fr_0.7fr_0.7fr_0.8fr]"
             >
               <div>
                 <p className="font-mono text-xs uppercase tracking-wider text-primary">
@@ -148,6 +149,7 @@ export function PacksUploadActivity() {
               <PackFact label="Status" value={statusLabel(batch.status)} />
               <PackFact label="Strategy" value={strategyLabel(batch.items[0]?.packStrategy)} />
               <PackFact label="Retention" value={`${batch.retentionDays} days`} />
+              <PackFact label="Cost share" value={billingLabel(batch)} />
             </article>
           ))}
         </div>
@@ -318,6 +320,11 @@ function BatchCard({ batch }: { batch: UploadApiBatchResponse }) {
             {formatFileCount(batch.items.length)}, {formatBytes(batch.totalCiphertextSizeBytes)}.
             Status is {statusLabel(batch.status).toLowerCase()}.
           </p>
+          {batch.billing ? (
+            <p className="mt-2 text-sm font-semibold text-foreground">
+              {billingSummary(batch)}
+            </p>
+          ) : null}
         </div>
         <span className="rounded-full border border-primary/40 px-3 py-1 font-mono text-xs text-primary">
           {statusLabel(batch.status)}
@@ -425,6 +432,29 @@ function strategyLabel(strategy?: string) {
     return "Dedicated blob";
   }
   return "Shared pack";
+}
+
+function billingSummary(batch: UploadApiBatchResponse) {
+  if (!batch.billing) {
+    return "No credit reserve";
+  }
+  if (batch.billing.creditStatus === "settled" && batch.billing.settledMicrocredits !== undefined) {
+    return `Settled: ${formatCredits(batch.billing.settledMicrocredits)}`;
+  }
+  if (batch.billing.creditStatus === "payment_required") {
+    return `Payment required: ${formatCredits(batch.billing.reserveMicrocredits)}`;
+  }
+  return `Reserved: ${formatCredits(batch.billing.reserveMicrocredits)}`;
+}
+
+function billingLabel(batch: UploadApiBatchResponse) {
+  if (!batch.billing) {
+    return "Pending estimate";
+  }
+  if (batch.billing.creditStatus === "settled" && batch.billing.settledMicrocredits !== undefined) {
+    return formatCredits(batch.billing.settledMicrocredits);
+  }
+  return formatCredits(batch.billing.reserveMicrocredits);
 }
 
 function formatFileCount(count: number) {

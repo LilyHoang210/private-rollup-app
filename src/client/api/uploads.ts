@@ -22,11 +22,18 @@ export interface UploadApiItemResponse extends UploadApiItemInput {
   updatedAt?: string;
 }
 
+export interface UploadBillingResponse {
+  reserveMicrocredits: number;
+  settledMicrocredits?: number;
+  creditStatus: "reserved" | "settled" | "payment_required";
+}
+
 export interface UploadApiBatchResponse {
   id: string;
   status: UploadStatus;
   retentionDays: RetentionCohort;
   totalCiphertextSizeBytes: number;
+  billing?: UploadBillingResponse;
   items: UploadApiItemResponse[];
   createdAt?: string;
   updatedAt?: string;

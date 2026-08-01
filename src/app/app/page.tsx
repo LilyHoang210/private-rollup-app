@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CreditBalancePanel } from "@/features/billing/credit-balance-panel";
 import { DashboardUploadActivity } from "@/features/uploads/upload-activity";
 
 export default function DashboardPage() {
@@ -51,6 +52,8 @@ export default function DashboardPage() {
         <DashboardUploadActivity />
 
         <aside className="space-y-8">
+          <CreditBalancePanel />
+
           <section className="overflow-hidden rounded-xl border border-border bg-surface">
             <div className="border-b border-border bg-surface-low p-6">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-foreground">

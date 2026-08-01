@@ -14,31 +14,39 @@ describe("upload panel", () => {
     localStorage.clear();
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(
-        Response.json({
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url.includes("/api/storage/status")) {
+          return Response.json({
           ready: false,
           driver: "shelby",
           network: "shelbynet",
           missing: ["SHELBY_API_URL", "SHELBY_CREDENTIAL_FILE"],
           mode: "control_plane_only",
-        }),
-      )
-      .mockResolvedValueOnce(
-        Response.json(
-          {
+          });
+        }
+        if (url.includes("/api/credits")) {
+          return Response.json(creditFixture());
+        }
+        if (url === "/api/uploads" && init?.method === "POST") {
+          return Response.json(
+            {
             id: "batch-1",
             status: "staging",
             items: [{ localId: "local-0", ciphertextSha256: "f".repeat(64) }],
-          },
-          { status: 201 },
-        ),
-      )
-      .mockResolvedValueOnce(
-        Response.json({
+            },
+            { status: 201 },
+          );
+        }
+        return Response.json({
           id: "batch-1",
           status: "waiting_for_pack",
           retentionDays: 90,
           totalCiphertextSizeBytes: 38,
+          billing: {
+            creditStatus: "reserved",
+            reserveMicrocredits: 1_500,
+          },
           createdAt: "2026-08-01T07:15:00.000Z",
           updatedAt: "2026-08-01T07:15:01.000Z",
           items: [
@@ -56,30 +64,36 @@ describe("upload panel", () => {
               packStrategy: "shared_pack",
             },
           ],
-        }),
-      );
+        });
+      });
 
     render(<UploadPanel />);
 
     expect(screen.getByText("Choose files")).toBeVisible();
-    expect(screen.queryByText(/Chọn|Không có tệp/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(new RegExp("\\u0043h\\u1ecdn|Kh\\u00f4ng c\\u00f3 t\\u1ec7p", "i")),
+    ).not.toBeInTheDocument();
 
     await userEvent.upload(
       screen.getByLabelText("Select files"),
       new File(["super secret plaintext"], "secret.txt", { type: "text/plain" }),
     );
     await userEvent.type(screen.getByLabelText("Private label"), "Personal docs");
+    expect(await screen.findByText(/Estimated reserve/)).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Encrypt and queue upload" }));
 
     expect(await screen.findByText(/batch queued/i)).toBeVisible();
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(fetchMock.mock.calls[0][0]).toBe("/api/storage/status");
-    expect(fetchMock.mock.calls[1][0]).toBe("/api/uploads");
-    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: "POST" });
-    expect(String(fetchMock.mock.calls[1][1]?.body)).not.toContain(
+    expect(fetchMock).toHaveBeenCalledWith("/api/storage/status");
+    expect(fetchMock).toHaveBeenCalledWith("/api/credits");
+    const createUploadCall = fetchMock.mock.calls.find((call) => call[0] === "/api/uploads");
+    expect(createUploadCall?.[1]).toMatchObject({ method: "POST" });
+    expect(String(createUploadCall?.[1]?.body)).not.toContain(
       "super secret plaintext",
     );
-    expect(fetchMock.mock.calls[2][0]).toBe("/api/uploads/batch-1/complete");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/uploads/batch-1/complete",
+      expect.objectContaining({ method: "POST" }),
+    );
     expect(localStorage.getItem("private-rollup:upload-batches:v1")).toContain(
       "batch-1",
     );
@@ -87,30 +101,39 @@ describe("upload panel", () => {
 
   it("shows storage readiness honestly when Shelby writer configuration is missing", async () => {
     vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(
-        Response.json({
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url.includes("/api/storage/status")) {
+          return Response.json({
           ready: false,
           driver: "shelby",
           network: "shelbynet",
           missing: ["SHELBY_API_URL"],
-        }),
-      )
-      .mockResolvedValueOnce(
-        Response.json(
-          {
+            mode: "control_plane_only",
+          });
+        }
+        if (url.includes("/api/credits")) {
+          return Response.json(creditFixture());
+        }
+        if (url === "/api/uploads" && init?.method === "POST") {
+          return Response.json(
+            {
             id: "batch-storage-status",
             status: "staging",
             items: [{ localId: "local-0", ciphertextSha256: "f".repeat(64) }],
-          },
-          { status: 201 },
-        ),
-      )
-      .mockResolvedValueOnce(
-        Response.json({
+            },
+            { status: 201 },
+          );
+        }
+        return Response.json({
           id: "batch-storage-status",
           status: "waiting_for_pack",
           retentionDays: 90,
           totalCiphertextSizeBytes: 21,
+          billing: {
+            creditStatus: "reserved",
+            reserveMicrocredits: 500,
+          },
           items: [
             {
               id: "item-1",
@@ -126,8 +149,8 @@ describe("upload panel", () => {
               packStrategy: "shared_pack",
             },
           ],
-        }),
-      );
+        });
+      });
 
     render(<UploadPanel />);
 
@@ -144,3 +167,14 @@ describe("upload panel", () => {
     expect(screen.getByText(/No Shelby or Aptos transaction has been submitted/)).toBeVisible();
   });
 });
+
+function creditFixture() {
+  return {
+    account: {
+      balanceMicrocredits: 100_000_000,
+      reservedMicrocredits: 0,
+      availableMicrocredits: 100_000_000,
+      ledger: [],
+    },
+  };
+}

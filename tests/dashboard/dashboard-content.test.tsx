@@ -11,11 +11,18 @@ describe("dashboard content", () => {
   });
 
   it("does not show demo pack data before real user data exists", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ batches: [] }));
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input).includes("/api/credits")) {
+        return Response.json(creditFixture());
+      }
+      return Response.json({ batches: [] });
+    });
 
     render(<DashboardPage />);
 
     expect(screen.getByRole("heading", { name: "Dashboard Overview" })).toBeVisible();
+    expect(await screen.findByText("Credit Balance")).toBeVisible();
+    expect(screen.getAllByText("100.000000 credits").length).toBeGreaterThan(0);
     expect(await screen.findByText("No live packs yet")).toBeVisible();
     expect(
       screen
@@ -28,14 +35,21 @@ describe("dashboard content", () => {
   });
 
   it("shows queued encrypted uploads from the current wallet session", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      Response.json({
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input).includes("/api/credits")) {
+        return Response.json(creditFixture({ reservedMicrocredits: 25_000 }));
+      }
+      return Response.json({
         batches: [
           {
             id: "c4b06f76-1111-4222-8333-123456789abc",
             status: "waiting_for_pack",
             retentionDays: 30,
             totalCiphertextSizeBytes: 115,
+            billing: {
+              creditStatus: "reserved",
+              reserveMicrocredits: 25_000,
+            },
             createdAt: "2026-08-01T07:15:00.000Z",
             updatedAt: "2026-08-01T07:15:01.000Z",
             items: [
@@ -56,8 +70,8 @@ describe("dashboard content", () => {
             ],
           },
         ],
-      }),
-    );
+      });
+    });
 
     render(<DashboardPage />);
 
@@ -65,10 +79,16 @@ describe("dashboard content", () => {
     expect(screen.getByText("Queued Batches")).toBeVisible();
     expect(screen.getByText(/1 file/)).toBeVisible();
     expect(screen.getByText("115 B")).toBeVisible();
+    expect(screen.getByText("Reserved: 0.025000 credits")).toBeVisible();
   });
 
   it("shows locally cached uploads when the serverless API returns a stale empty list", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ batches: [] }));
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input).includes("/api/credits")) {
+        return Response.json(creditFixture());
+      }
+      return Response.json({ batches: [] });
+    });
     localStorage.setItem(
       "private-rollup:upload-batches:v1",
       JSON.stringify([
@@ -76,8 +96,12 @@ describe("dashboard content", () => {
           id: "local-cache-batch-1",
           status: "waiting_for_pack",
           retentionDays: 365,
-          totalCiphertextSizeBytes: 128,
-          createdAt: "2026-08-01T07:15:00.000Z",
+              totalCiphertextSizeBytes: 128,
+              billing: {
+                creditStatus: "reserved",
+                reserveMicrocredits: 30_000,
+              },
+              createdAt: "2026-08-01T07:15:00.000Z",
           updatedAt: "2026-08-01T07:15:01.000Z",
           items: [
             {
@@ -104,3 +128,23 @@ describe("dashboard content", () => {
     expect(screen.getByText("128 B")).toBeVisible();
   });
 });
+
+function creditFixture(input?: { reservedMicrocredits?: number }) {
+  const reservedMicrocredits = input?.reservedMicrocredits ?? 0;
+  return {
+    account: {
+      balanceMicrocredits: 100_000_000,
+      reservedMicrocredits,
+      availableMicrocredits: 100_000_000 - reservedMicrocredits,
+      ledger: [
+        {
+          id: "entry-1",
+          type: "testnet_grant",
+          amountMicrocredits: 100_000_000,
+          reservedDeltaMicrocredits: 0,
+          createdAt: "2026-08-01T07:15:00.000Z",
+        },
+      ],
+    },
+  };
+}

@@ -8,6 +8,11 @@ import {
 } from "@/domain/files";
 import type { UploadStatus } from "@/domain/uploads";
 import { DomainError } from "@/domain/errors";
+import {
+  getUploadBilling,
+  reserveUploadCredit,
+  type UploadBillingRecord,
+} from "@/server/billing/credit-service";
 
 export interface CreateUploadItemInput {
   localId: string;
@@ -57,6 +62,7 @@ export interface UploadBatchRecord {
   retentionDays: RetentionCohort;
   status: UploadStatus;
   totalCiphertextSizeBytes: number;
+  billing?: UploadBillingRecord;
   items: UploadItemRecord[];
   createdAt: string;
   updatedAt: string;
@@ -82,16 +88,24 @@ export function createUploadBatch(input: CreateUploadBatchInput): UploadBatchRec
   const now = new Date().toISOString();
   const batchId = randomUUID();
   const items = input.items.map((item) => createItemRecord(batchId, item, now));
+  const totalCiphertextSizeBytes = items.reduce(
+    (total, item) => total + item.ciphertextSizeBytes,
+    0,
+  );
+  const billing = reserveUploadCredit({
+    userId: input.userId,
+    uploadId: batchId,
+    ciphertextBytes: totalCiphertextSizeBytes,
+    retentionDays,
+  });
   const batch: UploadBatchRecord = {
     id: batchId,
     userId: input.userId,
     idempotencyKey,
     retentionDays,
     status: "staging",
-    totalCiphertextSizeBytes: items.reduce(
-      (total, item) => total + item.ciphertextSizeBytes,
-      0,
-    ),
+    totalCiphertextSizeBytes,
+    billing,
     items,
     createdAt: now,
     updatedAt: now,
@@ -274,6 +288,7 @@ function makeIdempotencyIndexKey(userId: string, idempotencyKey: string) {
 function cloneBatch(batch: UploadBatchRecord): UploadBatchRecord {
   return {
     ...batch,
+    billing: getUploadBilling(batch.id) ?? batch.billing,
     items: batch.items.map((item) => ({ ...item })),
   };
 }
