@@ -272,7 +272,7 @@ export function UploadPanel() {
             Private local label
           </span>
           <input
-            aria-label="Private label"
+            aria-label="Private local label"
             value={label}
             onChange={(event) => setLabel(event.currentTarget.value)}
             placeholder="Example: Personal docs"
@@ -593,9 +593,9 @@ function StorageReadinessBanner({ status }: { status: StorageStatus }) {
 
   return (
     <div className="mt-5 rounded-xl border border-primary/40 bg-background p-4 text-sm text-muted">
-      <span className="font-semibold text-foreground">Storage writer configured.</span>{" "}
-      Chain completion still requires the Shelby upload worker to return a
-      verifiable transaction hash.
+      <span className="font-semibold text-foreground">Shelby storage is ready.</span>{" "}
+      Uploads are reported as successful only after the blob is committed and
+      verified against on-chain metadata.
     </div>
   );
 }

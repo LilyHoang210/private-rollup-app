@@ -82,4 +82,53 @@ describe("Shelby encrypted pack writer", () => {
     ).rejects.toThrow("Ciphertext pack checksum mismatch");
     expect(upload).not.toHaveBeenCalled();
   });
+
+  it("falls back to the account register transaction when the indexer is delayed", async () => {
+    const blobName = "private-rollup/batch-2.prp";
+    const client = {
+      upload: vi.fn().mockResolvedValue(undefined),
+      coordination: {
+        getFullObjectMetadata: vi.fn().mockResolvedValue({
+          uid: BigInt(43),
+          size: 4,
+          isWritten: true,
+          expirationMicros: 1_800_000_000_000_000,
+        }),
+        getBlobActivities: vi.fn().mockResolvedValue([]),
+      },
+      aptos: {
+        getAccountTransactions: vi.fn().mockResolvedValue([
+          {
+            hash: "0xregister",
+            success: true,
+            payload: {
+              function: "0xabc::blob_metadata::register_blob",
+              arguments: [blobName],
+            },
+          },
+        ]),
+      },
+    };
+
+    const result = await writeEncryptedPack(
+      {
+        batchId: "batch-2",
+        bytes: new Uint8Array([1, 2, 3, 4]),
+        sha256: "9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a",
+        retentionDays: 30,
+      },
+      {
+        config: {
+          network: "shelbynet",
+          privateKey: "secret",
+          location: "shelbynet-1",
+        },
+        createSigner: () =>
+          ({ accountAddress: { toString: () => "0xservice" } }) as never,
+        createClient: () => client as never,
+      },
+    );
+
+    expect(result.transactionHash).toBe("0xregister");
+  });
 });

@@ -5,11 +5,11 @@ export default function UploadPage() {
     <section className="mx-auto max-w-[1440px] space-y-8">
       <div>
         <h1 className="mb-2 text-5xl font-bold leading-tight text-foreground">
-          Upload Queue
+          Upload Files
         </h1>
         <p className="text-muted">
-          Encrypt files in the browser, stage ciphertext, and prepare them for
-          shared or dedicated packs.
+          Encrypt files in your browser, upload ciphertext to Shelby, and keep
+          a portable recovery receipt.
         </p>
       </div>
 

@@ -66,6 +66,15 @@ interface ShelbyClientPort {
       }>
     >;
   };
+  aptos?: {
+    getAccountTransactions(input: unknown): Promise<
+      Array<{
+        hash: string;
+        success: boolean;
+        payload?: { function?: string; arguments?: unknown[] };
+      }>
+    >;
+  };
 }
 
 interface ShelbyWriterDependencies {
@@ -108,7 +117,7 @@ export async function writeEncryptedPack(
     throw new Error("Shelby upload finished but on-chain verification failed");
   }
 
-  const transactionHash = await findCommitTransactionHash(
+  const transactionHash = await findUploadTransactionHash(
     client,
     signer.accountAddress.toString(),
     blobName,
@@ -163,7 +172,7 @@ function createShelbyClient(config: ShelbyWriterConfig): ShelbyClientPort {
   }) as ShelbyClientPort;
 }
 
-async function findCommitTransactionHash(
+async function findUploadTransactionHash(
   client: ShelbyClientPort,
   ownerAddress: string,
   blobName: string,
@@ -176,11 +185,29 @@ async function findCommitTransactionHash(
       },
       pagination: { limit: 20 },
     });
-    return activities.find(
+    const indexedHash = activities.find(
       (activity) =>
         activity.blobName === blobName &&
         (activity.type === "commit_object" || activity.type === "write_blob"),
     )?.transactionHash;
+    if (indexedHash) return indexedHash;
+  } catch {
+    // The indexer can lag the on-chain view immediately after a write.
+  }
+
+  try {
+    const transactions = await client.aptos?.getAccountTransactions({
+      accountAddress: ownerAddress,
+      options: { limit: 20 },
+    });
+    return transactions
+      ?.reverse()
+      .find(
+        (transaction) =>
+          transaction.success &&
+          transaction.payload?.function?.endsWith("::blob_metadata::register_blob") &&
+          transaction.payload.arguments?.some((argument) => argument === blobName),
+      )?.hash;
   } catch {
     return undefined;
   }
