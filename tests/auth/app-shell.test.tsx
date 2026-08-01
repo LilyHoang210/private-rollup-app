@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppShell } from "../../src/components/app-shell/app-shell";
@@ -169,6 +169,56 @@ describe("app shell", () => {
 
     expect(disconnect).toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledWith("/api/auth/logout", { method: "POST" });
+  });
+
+  it("logs out a server-hydrated session even when the wallet adapter is disconnected", async () => {
+    walletState.current.connected = false;
+    walletState.current.account = null;
+    walletState.current.wallet = null;
+    disconnect.mockRejectedValueOnce(new Error("Wallet extension is already disconnected"));
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(null, { status: 204 }),
+    );
+    getWalletSession.mockResolvedValue({
+      authenticated: true,
+      walletAddress: "0x1e41676a3362e56f7e98c9d06ec847b0a4feb9e09c71046253a633de4ee2072a",
+      walletAddressHash: "b".repeat(64),
+      chainId: "aptos-testnet",
+      expiresAt: "2026-08-08T00:00:00.000Z",
+    });
+
+    render(
+      <AppShell>
+        <h1>Dashboard</h1>
+      </AppShell>,
+    );
+
+    await userEvent.click(await screen.findByText("0x1e41...072a"));
+    await userEvent.click(screen.getByRole("button", { name: "Log out" }));
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/auth/logout", { method: "POST" });
+    expect(await screen.findByRole("button", { name: "Connect wallet" })).toBeVisible();
+    expect(screen.queryByRole("dialog", { name: "Wallet details" })).not.toBeInTheDocument();
+  });
+
+  it("opens notifications and settings dialogs from the header actions", async () => {
+    render(
+      <AppShell>
+        <h1>Dashboard</h1>
+      </AppShell>,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Notifications" }));
+
+    expect(screen.getByRole("dialog", { name: "Notifications" })).toBeVisible();
+    expect(screen.getByText("No notifications yet")).toBeVisible();
+
+    await userEvent.click(screen.getByRole("button", { name: "Close notifications" }));
+    await userEvent.click(screen.getByRole("button", { name: "Settings" }));
+
+    const settingsDialog = screen.getByRole("dialog", { name: "Workspace settings" });
+    expect(settingsDialog).toBeVisible();
+    expect(within(settingsDialog).getByText("Aptos Testnet")).toBeVisible();
   });
 
   it("lets disconnected users connect from the header wallet button", async () => {

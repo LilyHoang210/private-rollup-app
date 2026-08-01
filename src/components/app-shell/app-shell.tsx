@@ -2,17 +2,15 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import {
   Archive,
-  Bell,
   CircleHelp,
   FileText,
   Gauge,
   RotateCcwKey,
-  Settings,
   Shield,
   Sparkles,
   Upload,
 } from "lucide-react";
-import { ConnectedWalletBadge } from "./connected-wallet-badge";
+import { HeaderActions } from "./header-actions";
 
 const navItems = [
   { href: "/app", label: "Dashboard", action: "nav.dashboard", icon: Gauge },
@@ -100,23 +98,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Shield aria-hidden className="h-5 w-5 text-primary" />
               <span className="text-xl font-bold text-primary">Private Rollup</span>
             </div>
-            <div className="flex items-center gap-4">
-              <ConnectedWalletBadge />
-              <button
-                type="button"
-                aria-label="Notifications"
-                className="min-h-11 min-w-11 text-muted transition-colors hover:text-primary"
-              >
-                <Bell aria-hidden className="mx-auto h-5 w-5" />
-              </button>
-              <button
-                type="button"
-                aria-label="Settings"
-                className="min-h-11 min-w-11 text-muted transition-colors hover:text-primary"
-              >
-                <Settings aria-hidden className="mx-auto h-5 w-5" />
-              </button>
-            </div>
+            <HeaderActions />
           </header>
 
           <main

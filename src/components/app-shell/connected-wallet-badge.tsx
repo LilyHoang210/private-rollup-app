@@ -173,8 +173,20 @@ export function ConnectedWalletBadge() {
     setMessage("");
 
     try {
-      await Promise.resolve(disconnect());
-      await fetch("/api/auth/logout", { method: "POST" });
+      const response = await fetch("/api/auth/logout", { method: "POST" });
+      if (!response.ok) {
+        throw new Error("Could not end the web session.");
+      }
+
+      if (connected) {
+        try {
+          await Promise.resolve(disconnect());
+        } catch {
+          // The web session is already revoked. Wallet adapter disconnect is
+          // best-effort because extensions may auto-disconnect outside the app.
+        }
+      }
+
       setHydratedSession({ authenticated: false });
       setPanelOpen(false);
       setPendingWalletName(null);

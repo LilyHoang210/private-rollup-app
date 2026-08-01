@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { UploadApiBatchResponse } from "@/client/api/uploads";
 import { listUploadBatches } from "@/client/api/uploads";
+import {
+  mergeUploadBatches,
+  readLocalUploadBatches,
+} from "@/client/uploads/local-upload-cache";
 
 type UploadActivityState =
   | { kind: "loading" }
@@ -63,6 +67,13 @@ export function DashboardUploadActivity() {
 export function PacksUploadActivity() {
   const state = useUploadActivity();
   const batches = state.kind === "ready" ? state.batches : EMPTY_BATCHES;
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("expiration");
+  const visibleBatches = useMemo(
+    () => filterAndSortBatches(batches, query, statusFilter, sortBy),
+    [batches, query, statusFilter, sortBy],
+  );
 
   if (state.kind === "loading") {
     return (
@@ -82,37 +93,66 @@ export function PacksUploadActivity() {
 
   if (batches.length === 0) {
     return (
-      <div className="p-8">
-        <EmptyPacksState />
-      </div>
+      <>
+        <PackControls
+          query={query}
+          statusFilter={statusFilter}
+          sortBy={sortBy}
+          onQueryChange={setQuery}
+          onStatusFilterChange={setStatusFilter}
+          onSortByChange={setSortBy}
+        />
+        <div className="p-8">
+          <EmptyPacksState />
+        </div>
+      </>
     );
   }
 
   return (
-    <div className="divide-y divide-border">
-      {batches.map((batch) => (
-        <article
-          key={batch.id}
-          className="grid gap-4 p-5 md:grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr]"
-        >
-          <div>
-            <p className="font-mono text-xs uppercase tracking-wider text-primary">
-              Batch {batch.id.slice(0, 8)}
-            </p>
-            <h2 className="mt-1 text-xl font-semibold text-foreground">
-              {batch.items[0]?.label ?? "Encrypted upload"}
-            </h2>
-            <p className="mt-1 text-sm text-muted">
-              {formatFileCount(batch.items.length)} queued through the streamlined
-              upload pipeline.
-            </p>
-          </div>
-          <PackFact label="Status" value={statusLabel(batch.status)} />
-          <PackFact label="Strategy" value={strategyLabel(batch.items[0]?.packStrategy)} />
-          <PackFact label="Retention" value={`${batch.retentionDays} days`} />
-        </article>
-      ))}
-    </div>
+    <>
+      <PackControls
+        query={query}
+        statusFilter={statusFilter}
+        sortBy={sortBy}
+        onQueryChange={setQuery}
+        onStatusFilterChange={setStatusFilter}
+        onSortByChange={setSortBy}
+      />
+      {visibleBatches.length === 0 ? (
+        <div className="p-8">
+          <StatusPanel
+            title="No matching packs"
+            body="Adjust the search text, status filter, or sort option to inspect other encrypted upload batches."
+          />
+        </div>
+      ) : (
+        <div className="divide-y divide-border">
+          {visibleBatches.map((batch) => (
+            <article
+              key={batch.id}
+              className="grid gap-4 p-5 md:grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr]"
+            >
+              <div>
+                <p className="font-mono text-xs uppercase tracking-wider text-primary">
+                  Batch {batch.id.slice(0, 8)}
+                </p>
+                <h2 className="mt-1 text-xl font-semibold text-foreground">
+                  {batch.items[0]?.label ?? "Encrypted upload"}
+                </h2>
+                <p className="mt-1 text-sm text-muted">
+                  {formatFileCount(batch.items.length)} queued through the streamlined
+                  upload pipeline.
+                </p>
+              </div>
+              <PackFact label="Status" value={statusLabel(batch.status)} />
+              <PackFact label="Strategy" value={strategyLabel(batch.items[0]?.packStrategy)} />
+              <PackFact label="Retention" value={`${batch.retentionDays} days`} />
+            </article>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -125,12 +165,20 @@ function useUploadActivity() {
     void listUploadBatches()
       .then(({ batches }) => {
         if (active) {
-          setState({ kind: "ready", batches });
+          setState({
+            kind: "ready",
+            batches: mergeUploadBatches(batches, readLocalUploadBatches()),
+          });
         }
       })
       .catch(() => {
         if (active) {
-          setState({ kind: "failed" });
+          const localBatches = readLocalUploadBatches();
+          setState(
+            localBatches.length > 0
+              ? { kind: "ready", batches: localBatches }
+              : { kind: "failed" },
+          );
         }
       });
 
@@ -140,6 +188,110 @@ function useUploadActivity() {
   }, []);
 
   return state;
+}
+
+function PackControls({
+  onQueryChange,
+  onSortByChange,
+  onStatusFilterChange,
+  query,
+  sortBy,
+  statusFilter,
+}: {
+  onQueryChange: (value: string) => void;
+  onSortByChange: (value: string) => void;
+  onStatusFilterChange: (value: string) => void;
+  query: string;
+  sortBy: string;
+  statusFilter: string;
+}) {
+  return (
+    <div className="grid gap-3 border-b border-border bg-surface-low p-4 md:grid-cols-3">
+      <input
+        aria-label="Search packs"
+        className="min-h-11 rounded border border-border bg-background px-3 text-foreground outline-none focus:border-primary"
+        placeholder="Search pack or blob"
+        value={query}
+        onChange={(event) => onQueryChange(event.currentTarget.value)}
+      />
+      <select
+        aria-label="Filter status"
+        className="min-h-11 rounded border border-border bg-background px-3 text-foreground outline-none focus:border-primary"
+        value={statusFilter}
+        onChange={(event) => onStatusFilterChange(event.currentTarget.value)}
+      >
+        <option value="all">All statuses</option>
+        <option value="verified">Verified</option>
+        <option value="sealing">Sealing</option>
+        <option value="expiring">Expiring soon</option>
+      </select>
+      <select
+        aria-label="Sort packs"
+        className="min-h-11 rounded border border-border bg-background px-3 text-foreground outline-none focus:border-primary"
+        value={sortBy}
+        onChange={(event) => onSortByChange(event.currentTarget.value)}
+      >
+        <option value="expiration">Expiration first</option>
+        <option value="created">Newest first</option>
+        <option value="bytes">Largest contribution</option>
+      </select>
+    </div>
+  );
+}
+
+function filterAndSortBatches(
+  batches: UploadApiBatchResponse[],
+  query: string,
+  statusFilter: string,
+  sortBy: string,
+) {
+  const normalizedQuery = query.trim().toLowerCase();
+  const filtered = batches.filter((batch) => {
+    const text = [
+      batch.id,
+      batch.status,
+      statusLabel(batch.status),
+      strategyLabel(batch.items[0]?.packStrategy),
+      ...batch.items.map((item) => item.label),
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    const matchesQuery = !normalizedQuery || text.includes(normalizedQuery);
+    const matchesStatus = matchesStatusFilter(batch, statusFilter);
+    return matchesQuery && matchesStatus;
+  });
+
+  return [...filtered].sort((left, right) => {
+    if (sortBy === "bytes") {
+      return right.totalCiphertextSizeBytes - left.totalCiphertextSizeBytes;
+    }
+    if (sortBy === "created") {
+      return String(right.createdAt ?? "").localeCompare(String(left.createdAt ?? ""));
+    }
+
+    if (left.retentionDays !== right.retentionDays) {
+      return left.retentionDays - right.retentionDays;
+    }
+
+    return String(right.createdAt ?? "").localeCompare(String(left.createdAt ?? ""));
+  });
+}
+
+function matchesStatusFilter(batch: UploadApiBatchResponse, statusFilter: string) {
+  if (statusFilter === "verified") {
+    return batch.status === "available";
+  }
+
+  if (statusFilter === "sealing") {
+    return ["packing", "registering", "written", "verifying"].includes(batch.status);
+  }
+
+  if (statusFilter === "expiring") {
+    return batch.retentionDays === 30;
+  }
+
+  return true;
 }
 
 function summarizeBatches(batches: UploadApiBatchResponse[]) {

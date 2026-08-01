@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FolderUp, ShieldCheck, UploadCloud } from "lucide-react";
 import type { FileCategory, RetentionCohort } from "@/domain/files";
 import {
@@ -9,6 +9,7 @@ import {
   type UploadApiBatchResponse,
   type UploadApiItemInput,
 } from "@/client/api/uploads";
+import { rememberLocalUploadBatch } from "@/client/uploads/local-upload-cache";
 import { encryptChunkedPayload } from "@/client/crypto/chunk-encrypt";
 import {
   generateVaultKeyPair,
@@ -28,6 +29,18 @@ const categoryOptions: FileCategory[] = [
   "other",
 ];
 
+type StorageStatus =
+  | { kind: "loading" }
+  | {
+      kind: "ready";
+      ready: boolean;
+      driver: string;
+      network: string;
+      missing: string[];
+      mode: string;
+    }
+  | { kind: "failed" };
+
 export function UploadPanel() {
   const [files, setFiles] = useState<File[]>([]);
   const [label, setLabel] = useState("");
@@ -39,11 +52,47 @@ export function UploadPanel() {
     | { kind: "failed"; message: string }
     | { kind: "ready"; batch: UploadApiBatchResponse }
   >({ kind: "idle" });
+  const [storageStatus, setStorageStatus] = useState<StorageStatus>({
+    kind: "loading",
+  });
 
   const selectedSize = useMemo(
     () => files.reduce((total, file) => total + file.size, 0),
     [files],
   );
+
+  useEffect(() => {
+    let active = true;
+
+    void fetch("/api/storage/status")
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`Storage status request failed: ${response.status}`);
+        }
+
+        return response.json() as Promise<{
+          ready: boolean;
+          driver: string;
+          network: string;
+          missing: string[];
+          mode: string;
+        }>;
+      })
+      .then((status) => {
+        if (active) {
+          setStorageStatus({ kind: "ready", ...status });
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setStorageStatus({ kind: "failed" });
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function submitUpload() {
     if (files.length === 0) {
@@ -72,6 +121,7 @@ export function UploadPanel() {
         })),
       });
 
+      rememberLocalUploadBatch(completed);
       setState({ kind: "ready", batch: completed });
     } catch (error) {
       setState({
@@ -95,6 +145,8 @@ export function UploadPanel() {
           </p>
         </div>
       </div>
+
+      <StorageReadinessBanner status={storageStatus} />
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         <label className="space-y-2">
@@ -215,13 +267,18 @@ export function UploadPanel() {
             <ShieldCheck aria-hidden className="mt-0.5 h-5 w-5 text-primary" />
             <div>
               <p className="text-sm font-semibold text-foreground">
-                Batch queued:{" "}
+                Control-plane batch queued:{" "}
                 <span className="font-mono text-primary">{state.batch.id.slice(0, 8)}</span>
               </p>
               <p className="mt-1 text-sm text-muted">
                 Status is{" "}
                 <span className="font-mono text-foreground">{state.batch.status}</span>.
                 Items are ready for pack selection.
+              </p>
+              <p className="mt-1 text-sm text-muted">
+                {storageStatus.kind === "ready" && storageStatus.ready
+                  ? "Storage writer configuration is present, but this UI only reports a chain write after a real transaction hash is returned."
+                  : "No Shelby or Aptos transaction has been submitted for this batch yet."}
               </p>
             </div>
           </div>
@@ -348,6 +405,46 @@ function toArrayBuffer(bytes: Uint8Array) {
   const buffer = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(buffer).set(bytes);
   return buffer;
+}
+
+function StorageReadinessBanner({ status }: { status: StorageStatus }) {
+  if (status.kind === "loading") {
+    return (
+      <div className="mt-5 rounded-xl border border-border bg-background p-4 text-sm text-muted">
+        Checking Shelby storage writer configuration...
+      </div>
+    );
+  }
+
+  if (status.kind === "failed") {
+    return (
+      <div className="mt-5 rounded-xl border border-border bg-background p-4 text-sm text-muted">
+        Storage writer status is unavailable. Uploads can still be encrypted
+        and queued locally.
+      </div>
+    );
+  }
+
+  if (!status.ready) {
+    return (
+      <div className="mt-5 rounded-xl border border-border bg-background p-4 text-sm text-muted">
+        <span className="font-semibold text-foreground">
+          Storage writer is not configured.
+        </span>{" "}
+        This app will queue encrypted metadata only until{" "}
+        <span className="font-mono text-foreground">{status.missing.join(", ")}</span>{" "}
+        is configured for {status.driver} on {status.network}.
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-5 rounded-xl border border-primary/40 bg-background p-4 text-sm text-muted">
+      <span className="font-semibold text-foreground">Storage writer configured.</span>{" "}
+      Chain completion still requires the Shelby upload worker to return a
+      verifiable transaction hash.
+    </div>
+  );
 }
 
 function formatBytes(bytes: number) {

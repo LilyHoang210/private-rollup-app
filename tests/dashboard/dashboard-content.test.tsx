@@ -7,6 +7,7 @@ import DashboardPage from "../../src/app/app/page";
 describe("dashboard content", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    localStorage.clear();
   });
 
   it("does not show demo pack data before real user data exists", async () => {
@@ -64,5 +65,42 @@ describe("dashboard content", () => {
     expect(screen.getByText("Queued Batches")).toBeVisible();
     expect(screen.getByText(/1 file/)).toBeVisible();
     expect(screen.getByText("115 B")).toBeVisible();
+  });
+
+  it("shows locally cached uploads when the serverless API returns a stale empty list", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ batches: [] }));
+    localStorage.setItem(
+      "private-rollup:upload-batches:v1",
+      JSON.stringify([
+        {
+          id: "local-cache-batch-1",
+          status: "waiting_for_pack",
+          retentionDays: 365,
+          totalCiphertextSizeBytes: 128,
+          createdAt: "2026-08-01T07:15:00.000Z",
+          updatedAt: "2026-08-01T07:15:01.000Z",
+          items: [
+            {
+              id: "item-1",
+              localId: "local-0",
+              label: "Cached QA upload",
+              category: "dataset",
+              plaintextSizeBytes: 112,
+              ciphertextSizeBytes: 128,
+              ciphertextSha256: "c".repeat(64),
+              encryptedManifest: "manifest",
+              wrappedDek: "dek",
+              status: "waiting_for_pack",
+              packStrategy: "shared_pack",
+            },
+          ],
+        },
+      ]),
+    );
+
+    render(<DashboardPage />);
+
+    expect(await screen.findByText("Cached QA upload")).toBeVisible();
+    expect(screen.getByText("128 B")).toBeVisible();
   });
 });

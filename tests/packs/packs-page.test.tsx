@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import PacksPage from "../../src/app/app/packs/page";
 
@@ -63,4 +64,82 @@ describe("packs page", () => {
     expect(screen.getByText("Shared pack")).toBeVisible();
     expect(screen.getByText("30 days")).toBeVisible();
   });
+
+  it("filters pack rows by search text", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({ batches: [batchFixture("batch-a", "Alpha archive", 100)] }),
+    );
+
+    render(<PacksPage />);
+
+    expect(await screen.findByText("Alpha archive")).toBeVisible();
+
+    await userEvent.type(screen.getByLabelText("Search packs"), "no-such-pack-query");
+
+    expect(screen.queryByText("Alpha archive")).not.toBeInTheDocument();
+    expect(screen.getByText("No matching packs")).toBeVisible();
+  });
+
+  it("hides waiting batches when the verified filter is selected", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({ batches: [batchFixture("batch-a", "Waiting archive", 100)] }),
+    );
+
+    render(<PacksPage />);
+
+    expect(await screen.findByText("Waiting archive")).toBeVisible();
+
+    await userEvent.selectOptions(screen.getByLabelText("Filter status"), "verified");
+
+    expect(screen.queryByText("Waiting archive")).not.toBeInTheDocument();
+    expect(screen.getByText("No matching packs")).toBeVisible();
+  });
+
+  it("sorts pack rows by largest contribution", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({
+        batches: [
+          batchFixture("batch-small", "Small upload", 100),
+          batchFixture("batch-large", "Large upload", 500),
+        ],
+      }),
+    );
+
+    render(<PacksPage />);
+
+    expect(await screen.findByText("Small upload")).toBeVisible();
+
+    await userEvent.selectOptions(screen.getByLabelText("Sort packs"), "bytes");
+
+    const rows = screen.getAllByRole("article");
+    expect(rows[0]).toHaveTextContent("Large upload");
+    expect(rows[1]).toHaveTextContent("Small upload");
+  });
 });
+
+function batchFixture(id: string, label: string, totalCiphertextSizeBytes: number) {
+  return {
+    id,
+    status: "waiting_for_pack",
+    retentionDays: 90,
+    totalCiphertextSizeBytes,
+    createdAt: id === "batch-large" ? "2026-08-01T07:16:00.000Z" : "2026-08-01T07:15:00.000Z",
+    updatedAt: "2026-08-01T07:15:01.000Z",
+    items: [
+      {
+        id: `${id}-item`,
+        batchId: id,
+        localId: "local-0",
+        label,
+        category: "document",
+        plaintextSizeBytes: totalCiphertextSizeBytes - 16,
+        ciphertextSizeBytes: totalCiphertextSizeBytes,
+        ciphertextSha256: "a".repeat(64),
+        encryptedManifest: "manifest",
+        wrappedDek: "dek",
+        status: "waiting_for_pack",
+        packStrategy: "shared_pack",
+      },
+    ],
+  };
+}
