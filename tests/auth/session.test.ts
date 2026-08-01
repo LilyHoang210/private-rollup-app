@@ -7,6 +7,7 @@ import {
 describe("wallet scoped session token", () => {
   it("round-trips wallet identity and rejects tampering", () => {
     const token = createSessionToken({
+      walletAddress: "0x1234",
       walletAddressHash: "a".repeat(64),
       chainId: "aptos-testnet",
       maxAgeSeconds: 60,
@@ -20,11 +21,15 @@ describe("wallet scoped session token", () => {
         secret: "test-secret",
       }),
     ).toMatchObject({
+      walletAddress: "0x1234",
       walletAddressHash: "a".repeat(64),
       chainId: "aptos-testnet",
     });
+    const [payload, signature] = token.split(".");
+    const tamperedSignature = `${signature.startsWith("a") ? "b" : "a"}${signature.slice(1)}`;
+
     expect(
-      parseSessionToken(`${token.slice(0, -1)}x`, {
+      parseSessionToken(`${payload}.${tamperedSignature}`, {
         now: new Date("2026-08-01T00:00:30.000Z"),
         secret: "test-secret",
       }),

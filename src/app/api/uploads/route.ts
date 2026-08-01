@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { DomainError } from "@/domain/errors";
 import { getAuthenticatedUserId } from "@/server/auth/request-session";
-import { createUploadBatch } from "@/server/uploads/service";
+import { createUploadBatch, listUploadBatchesForUser } from "@/server/uploads/service";
 
 const uploadItemSchema = z
   .object({
@@ -34,6 +34,15 @@ const createUploadSchema = z
     items: z.array(uploadItemSchema).min(1).max(1000),
   })
   .strict();
+
+export async function GET(request: Request) {
+  const userId = getAuthenticatedUserId(request);
+  if (!userId) {
+    return NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 401 });
+  }
+
+  return NextResponse.json({ batches: listUploadBatchesForUser(userId) });
+}
 
 export async function POST(request: Request) {
   const userId = getAuthenticatedUserId(request);

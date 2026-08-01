@@ -30,4 +30,17 @@ describe("vault setup panel", () => {
     );
     expect(await screen.findByText(/Owner fingerprint/)).toBeVisible();
   });
+
+  it("tells users to connect their wallet when vault registration is unauthenticated", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({ error: "AUTH_REQUIRED" }, { status: 401 }),
+    );
+
+    render(<VaultSetupPanel />);
+    await userEvent.click(screen.getByRole("button", { name: "Initialize Vault" }));
+
+    expect(
+      await screen.findByText("Connect your wallet before initializing the vault."),
+    ).toBeVisible();
+  });
 });

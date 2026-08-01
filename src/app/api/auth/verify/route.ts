@@ -30,12 +30,14 @@ export async function POST(request: Request) {
     const verified = await authService.verifyChallenge(body.data);
     const sessionMaxAgeSeconds = 7 * 24 * 60 * 60;
     const token = createSessionToken({
+      walletAddress: verified.walletAddress,
       walletAddressHash: verified.walletAddressHash,
       chainId: verified.chainId,
       maxAgeSeconds: sessionMaxAgeSeconds,
     });
     const response = NextResponse.json({
       chainId: verified.chainId,
+      walletAddress: verified.walletAddress,
       walletAddressHash: verified.walletAddressHash,
       sessionTokenHash: hashSessionToken(token),
     });

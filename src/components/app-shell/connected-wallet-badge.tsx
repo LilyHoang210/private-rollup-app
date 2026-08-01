@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import { LogOut, Wallet } from "lucide-react";
 import { getAptBalance } from "@/client/aptos/balance";
+import { getWalletSession } from "@/client/api/auth";
 import {
   authenticateConnectedWallet,
   isExtensionWallet,
@@ -12,6 +13,15 @@ import {
 } from "@/features/auth/wallet-auth";
 
 type WalletActionStatus = "idle" | "connecting" | "connected" | "failed" | "logging_out";
+type HydratedSession =
+  | { authenticated: false }
+  | {
+      authenticated: true;
+      walletAddress?: string;
+      walletAddressHash?: string;
+      chainId: string;
+      expiresAt: string;
+    };
 type BalanceState =
   | { kind: "idle" }
   | { kind: "loading" }
@@ -34,14 +44,52 @@ export function ConnectedWalletBadge() {
   const [isPanelOpen, setPanelOpen] = useState(false);
   const [pendingWalletName, setPendingWalletName] = useState<string | null>(null);
   const [balanceState, setBalanceState] = useState<BalanceState>({ kind: "idle" });
+  const [hydratedSession, setHydratedSession] = useState<HydratedSession>({
+    authenticated: false,
+  });
   const authStartedRef = useRef(false);
   const address = account?.address?.toString();
+  const displayAddress =
+    address ??
+    (hydratedSession.authenticated ? hydratedSession.walletAddress : undefined);
+  const hasActiveSession = Boolean(displayAddress || connected);
   const extensionWallets = wallets.filter(isExtensionWallet);
-  const label = address
-    ? shortAddress(address)
+  const label = displayAddress
+    ? shortAddress(displayAddress)
     : connected || isLoading
       ? "Wallet connected"
       : "Connect wallet";
+
+  useEffect(() => {
+    let active = true;
+
+    void getWalletSession()
+      .then((session) => {
+        if (!active) {
+          return;
+        }
+        setHydratedSession(
+          session.authenticated === true
+            ? {
+                authenticated: true,
+                chainId: session.chainId,
+                walletAddress: session.walletAddress,
+                walletAddressHash: session.walletAddressHash,
+                expiresAt: session.expiresAt ?? "",
+              }
+            : { authenticated: false },
+        );
+      })
+      .catch(() => {
+        if (active) {
+          setHydratedSession({ authenticated: false });
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!pendingWalletName || !connected || !account || authStartedRef.current) {
@@ -55,6 +103,12 @@ export function ConnectedWalletBadge() {
         const { chainId } = await authenticateConnectedWallet({
           account,
           signMessage,
+        });
+        setHydratedSession({
+          authenticated: true,
+          chainId,
+          walletAddress: address,
+          expiresAt: "",
         });
         setStatus("connected");
         setPendingWalletName(null);
@@ -70,15 +124,15 @@ export function ConnectedWalletBadge() {
         );
       }
     })();
-  }, [account, connected, pendingWalletName, signMessage]);
+  }, [account, address, connected, pendingWalletName, signMessage]);
 
   useEffect(() => {
-    if (!isPanelOpen || !address || !connected) {
+    if (!isPanelOpen || !displayAddress) {
       return;
     }
 
     let active = true;
-    void getAptBalance(address)
+    void getAptBalance(displayAddress)
       .then((value) => {
         if (active) {
           setBalanceState({ kind: "ready", value });
@@ -93,7 +147,7 @@ export function ConnectedWalletBadge() {
     return () => {
       active = false;
     };
-  }, [address, connected, isPanelOpen]);
+  }, [displayAddress, isPanelOpen]);
 
   async function handleConnect(walletName: string) {
     setStatus("connecting");
@@ -121,6 +175,7 @@ export function ConnectedWalletBadge() {
     try {
       await Promise.resolve(disconnect());
       await fetch("/api/auth/logout", { method: "POST" });
+      setHydratedSession({ authenticated: false });
       setPanelOpen(false);
       setPendingWalletName(null);
       setStatus("idle");
@@ -131,7 +186,7 @@ export function ConnectedWalletBadge() {
   }
 
   function openPanel() {
-    setBalanceState(address && connected ? { kind: "loading" } : { kind: "idle" });
+    setBalanceState(displayAddress ? { kind: "loading" } : { kind: "idle" });
     setPanelOpen(true);
   }
 
@@ -139,9 +194,9 @@ export function ConnectedWalletBadge() {
     <div className="hidden md:block">
       <button
         type="button"
-        data-action={address || connected ? "wallet.details.open" : "wallet.connect.open"}
-        aria-label={address ? `Connected wallet ${address}` : label}
-        title={address ?? label}
+        data-action={hasActiveSession ? "wallet.details.open" : "wallet.connect.open"}
+        aria-label={displayAddress ? `Connected wallet ${displayAddress}` : label}
+        title={displayAddress ?? label}
         onClick={openPanel}
         disabled={status === "connecting" || status === "logging_out" || isLoading}
         className="inline-flex min-h-8 items-center gap-2 rounded border border-border bg-surface-low px-3 py-1 font-mono text-xs text-foreground transition-colors hover:border-primary disabled:cursor-not-allowed disabled:opacity-70"
@@ -150,19 +205,24 @@ export function ConnectedWalletBadge() {
         <span>{status === "connecting" ? "Connecting..." : label}</span>
       </button>
 
-      {isPanelOpen && (address || connected) ? (
+      {isPanelOpen && hasActiveSession ? (
         <WalletDetailsDialog
-          address={address}
+          address={displayAddress}
           balanceState={balanceState}
-          message={message}
+          message={
+            message ||
+            (!connected && displayAddress
+              ? "Your web session is active. Reconnect the wallet only when a new signature is required."
+              : "")
+          }
           status={status}
-          walletName={wallet?.name}
+          walletName={wallet?.name ?? (displayAddress ? "Session wallet" : undefined)}
           onClose={() => setPanelOpen(false)}
           onLogout={handleLogout}
         />
       ) : null}
 
-      {isPanelOpen && !address && !connected ? (
+      {isPanelOpen && !hasActiveSession ? (
         <WalletPickerDialog
           extensionWallets={extensionWallets}
           isBusy={status === "connecting" || isLoading}

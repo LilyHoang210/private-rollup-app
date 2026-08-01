@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DashboardUploadActivity } from "@/features/uploads/upload-activity";
 
 export default function DashboardPage() {
   return (
@@ -46,54 +47,8 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Metric label="Active Packs" value="0" />
-        <Metric label="Encrypted Files" value="0" />
-        <Metric label="Stored Bytes" value="0 B" />
-        <Metric label="Expiring < 30 Days" value="0" />
-      </div>
-
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-        <section className="overflow-hidden rounded-xl border border-border bg-surface lg:col-span-2">
-          <div className="flex items-center justify-between border-b border-border bg-surface-low p-6">
-            <h2 className="text-2xl font-semibold text-foreground">
-              Pack Participation
-            </h2>
-            <Link
-              data-action="nav.packs"
-              href="/app/packs"
-              className="text-sm font-semibold text-primary hover:underline"
-            >
-              View packs
-            </Link>
-          </div>
-          <div className="p-8">
-            <div className="rounded-xl border border-dashed border-border bg-background p-8 text-center">
-              <h3 className="text-2xl font-semibold text-foreground">
-                No live packs yet
-              </h3>
-              <p className="mx-auto mt-3 max-w-2xl text-muted">
-                Your wallet is connected, but this workspace does not have live
-                encrypted uploads or blob-pack participation records yet. Start
-                with the wizard, then upload a small test file.
-              </p>
-              <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
-                <Link
-                  href="/app/setup"
-                  className="flex min-h-11 items-center justify-center rounded bg-primary px-5 py-2 text-sm font-semibold text-[#133155] transition-opacity hover:opacity-90"
-                >
-                  Start setup
-                </Link>
-                <Link
-                  href="/app/upload"
-                  className="flex min-h-11 items-center justify-center rounded border border-border bg-surface px-5 py-2 text-sm font-semibold text-foreground transition-colors hover:border-primary"
-                >
-                  Upload test file
-                </Link>
-              </div>
-            </div>
-          </div>
-        </section>
+        <DashboardUploadActivity />
 
         <aside className="space-y-8">
           <section className="overflow-hidden rounded-xl border border-border bg-surface">
@@ -124,14 +79,5 @@ export default function DashboardPage() {
         </aside>
       </div>
     </section>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex h-32 flex-col justify-between rounded-xl border border-border bg-surface p-6 transition-colors hover:border-primary">
-      <p className="text-sm font-semibold uppercase text-muted-strong">{label}</p>
-      <p className="text-4xl font-bold text-foreground">{value}</p>
-    </div>
   );
 }

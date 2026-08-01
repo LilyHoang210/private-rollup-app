@@ -18,6 +18,8 @@ export interface UploadApiItemResponse extends UploadApiItemInput {
   status: UploadStatus;
   packStrategy: "shared_pack" | "dedicated_blob";
   stagingRef?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface UploadApiBatchResponse {
@@ -26,6 +28,8 @@ export interface UploadApiBatchResponse {
   retentionDays: RetentionCohort;
   totalCiphertextSizeBytes: number;
   items: UploadApiItemResponse[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface CreateUploadBatchRequest {
@@ -57,6 +61,18 @@ export async function completeUploadBatch(
   fetcher: Fetcher = fetch,
 ): Promise<UploadApiBatchResponse> {
   return postJson(fetcher, `/api/uploads/${batchId}/complete`, input);
+}
+
+export async function listUploadBatches(
+  fetcher: Fetcher = fetch,
+): Promise<{ batches: UploadApiBatchResponse[] }> {
+  const response = await fetcher("/api/uploads");
+
+  if (!response.ok) {
+    throw new Error(`Upload list request failed: ${response.status}`);
+  }
+
+  return (await response.json()) as { batches: UploadApiBatchResponse[] };
 }
 
 async function postJson<TResponse>(

@@ -1,15 +1,21 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import DashboardPage from "../../src/app/app/page";
 
 describe("dashboard content", () => {
-  it("does not show demo pack data before real user data exists", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("does not show demo pack data before real user data exists", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ batches: [] }));
+
     render(<DashboardPage />);
 
     expect(screen.getByRole("heading", { name: "Dashboard Overview" })).toBeVisible();
-    expect(screen.getByText("No live packs yet")).toBeVisible();
+    expect(await screen.findByText("No live packs yet")).toBeVisible();
     expect(
       screen
         .getAllByRole("link", { name: "Start setup" })
@@ -18,5 +24,45 @@ describe("dashboard content", () => {
     expect(screen.queryByText("Alpha-Genesis-92")).not.toBeInTheDocument();
     expect(screen.queryByText("Beta-Storage-04")).not.toBeInTheDocument();
     expect(screen.queryByText("1,048")).not.toBeInTheDocument();
+  });
+
+  it("shows queued encrypted uploads from the current wallet session", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({
+        batches: [
+          {
+            id: "c4b06f76-1111-4222-8333-123456789abc",
+            status: "waiting_for_pack",
+            retentionDays: 30,
+            totalCiphertextSizeBytes: 115,
+            createdAt: "2026-08-01T07:15:00.000Z",
+            updatedAt: "2026-08-01T07:15:01.000Z",
+            items: [
+              {
+                id: "item-1",
+                batchId: "c4b06f76-1111-4222-8333-123456789abc",
+                localId: "local-0",
+                label: "QA smoke test",
+                category: "document",
+                plaintextSizeBytes: 99,
+                ciphertextSizeBytes: 115,
+                ciphertextSha256: "a".repeat(64),
+                encryptedManifest: "manifest",
+                wrappedDek: "dek",
+                status: "waiting_for_pack",
+                packStrategy: "shared_pack",
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    render(<DashboardPage />);
+
+    expect(await screen.findByText("QA smoke test")).toBeVisible();
+    expect(screen.getByText("Queued Batches")).toBeVisible();
+    expect(screen.getByText(/1 file/)).toBeVisible();
+    expect(screen.getByText("115 B")).toBeVisible();
   });
 });

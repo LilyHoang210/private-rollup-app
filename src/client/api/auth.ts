@@ -21,8 +21,11 @@ export interface WalletChallengeResponse {
 }
 
 export interface AuthSessionResponse {
+  authenticated?: boolean;
   chainId: string;
+  walletAddress?: string;
   walletAddressHash?: string;
+  expiresAt?: string;
 }
 
 type Fetcher = typeof fetch;
@@ -65,4 +68,16 @@ export async function verifyWalletChallenge(
     "/api/auth/verify",
     input,
   );
+}
+
+export async function getWalletSession(
+  fetcher: Fetcher = fetch,
+): Promise<AuthSessionResponse | { authenticated: false }> {
+  const response = await fetcher("/api/auth/session");
+
+  if (!response.ok) {
+    throw new Error(`Session request failed: ${response.status}`);
+  }
+
+  return (await response.json()) as AuthSessionResponse | { authenticated: false };
 }

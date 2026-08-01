@@ -3,6 +3,7 @@ import {
   completeUploadBatch,
   createUploadBatch,
   getUploadBatch,
+  listUploadBatchesForUser,
   resetUploadStoreForTests,
 } from "../../src/server/uploads/service";
 
@@ -93,6 +94,40 @@ describe("upload service", () => {
       stagingRef: "staging://uploads/file-1",
     });
     expect(getUploadBatch(created.id, "demo-user")?.status).toBe("waiting_for_pack");
+  });
+
+  it("lists only the current user's newest upload batches", () => {
+    const older = createUploadBatch({
+      userId: "demo-user",
+      idempotencyKey: "idem-list-1",
+      retentionDays: 30,
+      items: [baseItem],
+    });
+    const newer = createUploadBatch({
+      userId: "demo-user",
+      idempotencyKey: "idem-list-2",
+      retentionDays: 90,
+      items: [
+        {
+          ...baseItem,
+          localId: "file-2",
+          label: "Research dataset",
+          category: "dataset",
+          ciphertextSha256: "f".repeat(64),
+        },
+      ],
+    });
+    createUploadBatch({
+      userId: "other-user",
+      idempotencyKey: "idem-list-other",
+      retentionDays: 365,
+      items: [baseItem],
+    });
+
+    expect(listUploadBatchesForUser("demo-user").map((batch) => batch.id)).toEqual([
+      newer.id,
+      older.id,
+    ]);
   });
 
   it("marks a batch failed on checksum mismatch", () => {

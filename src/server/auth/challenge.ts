@@ -44,6 +44,7 @@ interface ChallengeRecord {
 }
 
 export interface VerifiedWallet {
+  walletAddress: string;
   walletAddressHash: string;
   chainId: string;
 }
@@ -154,6 +155,7 @@ export class AuthService {
     await this.store.markChallengeUsed(challenge.id, now);
 
     return {
+      walletAddress: input.walletAddress,
       walletAddressHash,
       chainId: challenge.chainId,
     };

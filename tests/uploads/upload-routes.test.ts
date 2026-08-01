@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { POST as createUpload } from "../../src/app/api/uploads/route";
+import { GET as listUploads, POST as createUpload } from "../../src/app/api/uploads/route";
 import { GET as getUpload } from "../../src/app/api/uploads/[uploadId]/route";
 import { POST as completeUpload } from "../../src/app/api/uploads/[uploadId]/complete/route";
 import {
@@ -76,6 +76,22 @@ describe("upload API routes", () => {
     await expect(completeResponse.json()).resolves.toMatchObject({
       id: created.id,
       status: "waiting_for_pack",
+    });
+
+    const listResponse = await listUploads(
+      new Request("http://localhost/api/uploads", {
+        headers: authHeaders("a".repeat(64)),
+      }),
+    );
+    expect(listResponse.status).toBe(200);
+    await expect(listResponse.json()).resolves.toMatchObject({
+      batches: [
+        {
+          id: created.id,
+          status: "waiting_for_pack",
+          items: [{ label: "Passport scan" }],
+        },
+      ],
     });
   });
 

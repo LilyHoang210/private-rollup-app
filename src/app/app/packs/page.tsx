@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { PacksUploadActivity } from "@/features/uploads/upload-activity";
 
 export default function PacksPage() {
   return (
@@ -41,32 +41,7 @@ export default function PacksPage() {
           </select>
         </div>
 
-        <div className="p-8">
-          <div className="rounded-xl border border-dashed border-border bg-background p-8 text-center">
-            <h2 className="text-2xl font-semibold text-foreground">
-              No pack participation yet
-            </h2>
-            <p className="mx-auto mt-3 max-w-2xl text-muted">
-              Packs will appear here after encrypted uploads are staged and
-              assigned to shared or dedicated blob storage. Start with a small
-              test upload so you can inspect the receipt and recovery path.
-            </p>
-            <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
-              <Link
-                href="/app/upload"
-                className="flex min-h-11 items-center justify-center rounded bg-primary px-5 py-2 text-sm font-semibold text-[#133155] transition-opacity hover:opacity-90"
-              >
-                Upload a test file
-              </Link>
-              <Link
-                href="/app/recovery"
-                className="flex min-h-11 items-center justify-center rounded border border-border bg-surface px-5 py-2 text-sm font-semibold text-foreground transition-colors hover:border-primary"
-              >
-                Review recovery
-              </Link>
-            </div>
-          </div>
-        </div>
+        <PacksUploadActivity />
       </div>
     </section>
   );

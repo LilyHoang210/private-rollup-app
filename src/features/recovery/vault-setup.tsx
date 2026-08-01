@@ -8,7 +8,7 @@ export function VaultSetupPanel() {
     | { kind: "idle" }
     | { kind: "loading" }
     | { kind: "ready"; ownerFingerprint: string }
-    | { kind: "failed" }
+    | { kind: "failed"; message: string }
   >({ kind: "idle" });
 
   async function initializeVault() {
@@ -25,13 +25,22 @@ export function VaultSetupPanel() {
       });
 
       if (!response.ok) {
-        throw new Error("Vault request failed");
+        if (response.status === 401) {
+          throw new Error("Connect your wallet before initializing the vault.");
+        }
+        throw new Error("Vault registration failed. Check your connection and try again.");
       }
 
       const body = (await response.json()) as { ownerFingerprint: string };
       setState({ kind: "ready", ownerFingerprint: body.ownerFingerprint });
-    } catch {
-      setState({ kind: "failed" });
+    } catch (error) {
+      setState({
+        kind: "failed",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Vault registration failed. Check your connection and try again.",
+      });
     }
   }
 
@@ -61,7 +70,7 @@ export function VaultSetupPanel() {
 
       <div aria-live="polite" className="mt-4 text-sm text-muted">
         {state.kind === "idle" ? "Vault public key is not registered yet." : null}
-        {state.kind === "failed" ? "Vault registration failed." : null}
+        {state.kind === "failed" ? state.message : null}
         {state.kind === "ready" ? (
           <p>
             Owner fingerprint{" "}

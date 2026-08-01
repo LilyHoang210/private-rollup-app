@@ -9,12 +9,14 @@ export const SESSION_COOKIE_NAME = "pr_session";
 const DEFAULT_SESSION_SECRET = "private-rollup-dev-session-secret";
 
 export interface AuthenticatedSession {
+  walletAddress?: string;
   walletAddressHash: string;
   chainId: string;
   expiresAt: Date;
 }
 
 export function createSessionToken(input: {
+  walletAddress?: string;
   walletAddressHash: string;
   chainId: string;
   maxAgeSeconds: number;
@@ -24,6 +26,7 @@ export function createSessionToken(input: {
   const now = input.now ?? new Date();
   const payload = {
     version: 1,
+    walletAddress: input.walletAddress,
     walletAddressHash: input.walletAddressHash,
     chainId: input.chainId,
     issuedAt: now.toISOString(),
@@ -55,6 +58,7 @@ export function parseSessionToken(
     const payload = JSON.parse(
       Buffer.from(encodedPayload, "base64url").toString("utf8"),
     ) as Partial<{
+      walletAddress: unknown;
       walletAddressHash: unknown;
       chainId: unknown;
       expiresAt: unknown;
@@ -78,6 +82,8 @@ export function parseSessionToken(
     }
 
     return {
+      walletAddress:
+        typeof payload.walletAddress === "string" ? payload.walletAddress : undefined,
       walletAddressHash: payload.walletAddressHash,
       chainId: payload.chainId,
       expiresAt,

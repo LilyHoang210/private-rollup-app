@@ -160,6 +160,14 @@ export function getUploadBatch(
   return cloneBatch(batch);
 }
 
+export function listUploadBatchesForUser(userId: string): UploadBatchRecord[] {
+  return Array.from(batchesById.values())
+    .filter((batch) => batch.userId === userId)
+    .reverse()
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    .map(cloneBatch);
+}
+
 export function resetUploadStoreForTests() {
   batchesById.clear();
   idempotencyIndex.clear();

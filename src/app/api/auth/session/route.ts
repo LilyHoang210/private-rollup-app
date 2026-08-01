@@ -7,6 +7,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       authenticated: true,
       chainId: session.chainId,
+      walletAddress: session.walletAddress,
       walletAddressHash: session.walletAddressHash,
       expiresAt: session.expiresAt.toISOString(),
     });

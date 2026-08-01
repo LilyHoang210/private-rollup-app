@@ -7,6 +7,7 @@ import { AppShell } from "../../src/components/app-shell/app-shell";
 
 const createWalletChallenge = vi.fn();
 const verifyWalletChallenge = vi.fn();
+const getWalletSession = vi.fn();
 const getAptBalance = vi.fn();
 const connect = vi.fn();
 const disconnect = vi.fn();
@@ -31,6 +32,7 @@ const walletState = vi.hoisted(() => ({
 
 vi.mock("../../src/client/api/auth", () => ({
   createWalletChallenge: (...args: unknown[]) => createWalletChallenge(...args),
+  getWalletSession: (...args: unknown[]) => getWalletSession(...args),
   verifyWalletChallenge: (...args: unknown[]) => verifyWalletChallenge(...args),
 }));
 
@@ -64,6 +66,7 @@ describe("app shell", () => {
       expiresAt: "2026-08-01T00:05:00.000Z",
     });
     verifyWalletChallenge.mockResolvedValue({ chainId: "aptos-testnet" });
+    getWalletSession.mockResolvedValue({ authenticated: false });
   });
 
   afterEach(() => {
@@ -120,6 +123,28 @@ describe("app shell", () => {
     );
 
     expect(screen.getByText("Wallet connected")).toBeVisible();
+  });
+
+  it("hydrates the header from an active server session after reload", async () => {
+    walletState.current.connected = false;
+    walletState.current.account = null;
+    walletState.current.wallet = null;
+    getWalletSession.mockResolvedValue({
+      authenticated: true,
+      walletAddress: "0x1e41676a3362e56f7e98c9d06ec847b0a4feb9e09c71046253a633de4ee2072a",
+      walletAddressHash: "b".repeat(64),
+      chainId: "aptos-testnet",
+      expiresAt: "2026-08-08T00:00:00.000Z",
+    });
+
+    render(
+      <AppShell>
+        <h1>Dashboard</h1>
+      </AppShell>,
+    );
+
+    expect(await screen.findByText("0x1e41...072a")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Connect wallet" })).not.toBeInTheDocument();
   });
 
   it("opens connected wallet details with balance and logout", async () => {
