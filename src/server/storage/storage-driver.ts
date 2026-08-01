@@ -8,7 +8,10 @@ export interface StorageDriverStatus {
   mode: StorageDriverMode;
 }
 
-const REQUIRED_SHELBY_ENV = ["SHELBY_API_URL", "SHELBY_CREDENTIAL_FILE"] as const;
+const REQUIRED_SHELBY_ENV = [
+  "SHELBY_ACCOUNT_PRIVATE_KEY",
+  "SHELBY_LOCATION",
+] as const;
 
 export function getStorageDriverStatus(
   env: NodeJS.ProcessEnv = process.env,

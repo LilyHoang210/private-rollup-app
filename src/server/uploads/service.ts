@@ -10,9 +10,11 @@ import type { UploadStatus } from "@/domain/uploads";
 import { DomainError } from "@/domain/errors";
 import {
   getUploadBilling,
+  releaseUploadCredit,
   reserveUploadCredit,
   type UploadBillingRecord,
 } from "@/server/billing/credit-service";
+import type { ShelbyWriteReceipt } from "@/server/storage/shelby-writer";
 
 export interface CreateUploadItemInput {
   localId: string;
@@ -63,9 +65,35 @@ export interface UploadBatchRecord {
   status: UploadStatus;
   totalCiphertextSizeBytes: number;
   billing?: UploadBillingRecord;
+  storage?: ShelbyWriteReceipt;
   items: UploadItemRecord[];
   createdAt: string;
   updatedAt: string;
+}
+
+export function markUploadBatchAvailable(input: {
+  userId: string;
+  batchId: string;
+  storage: ShelbyWriteReceipt;
+}) {
+  const batch = requireBatch(input.batchId, input.userId);
+  const now = new Date().toISOString();
+  batch.status = "available";
+  batch.storage = input.storage;
+  batch.updatedAt = now;
+  for (const item of batch.items) {
+    item.status = "available";
+    item.stagingRef = `shelby://${input.storage.ownerAddress}/${input.storage.blobName}`;
+    item.updatedAt = now;
+  }
+  return cloneBatch(batch);
+}
+
+export function failUploadBatch(input: { userId: string; batchId: string }) {
+  const batch = requireBatch(input.batchId, input.userId);
+  markBatchFailed(batch);
+  releaseUploadCredit(input.userId, input.batchId);
+  return cloneBatch(batch);
 }
 
 const batchesById = new Map<string, UploadBatchRecord>();

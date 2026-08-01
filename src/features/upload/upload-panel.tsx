@@ -1,23 +1,28 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { FolderUp, ShieldCheck, UploadCloud } from "lucide-react";
+import { Download, FolderUp, ShieldCheck, UploadCloud } from "lucide-react";
 import { formatCredits, getCreditAccount } from "@/client/api/credits";
 import { estimateReserveMicrocredits } from "@/domain/credits";
 import type { FileCategory, RetentionCohort } from "@/domain/files";
 import {
-  completeUploadBatch,
-  createUploadBatch,
+  uploadEncryptedPack,
   type UploadApiBatchResponse,
   type UploadApiItemInput,
 } from "@/client/api/uploads";
 import { rememberLocalUploadBatch } from "@/client/uploads/local-upload-cache";
+import {
+  base64ToBytes,
+  buildEncryptedPack,
+  bytesToBase64 as packBytesToBase64,
+} from "@/client/uploads/encrypted-pack";
 import { encryptChunkedPayload } from "@/client/crypto/chunk-encrypt";
 import {
-  generateVaultKeyPair,
+  importVaultPublicKey,
   wrapDekForVault,
   type WrappedDek,
 } from "@/client/crypto/hpke";
+import { readLocalVaultPublicMaterial } from "@/client/vault/local-vault";
 
 const CHUNK_SIZE_BYTES = 1024 * 1024;
 const categoryOptions: FileCategory[] = [
@@ -68,6 +73,7 @@ export function UploadPanel() {
     kind: "loading",
   });
   const [creditState, setCreditState] = useState<CreditState>({ kind: "loading" });
+  const [vaultMaterial] = useState(() => readLocalVaultPublicMaterial());
 
   const selectedSize = useMemo(
     () => files.reduce((total, file) => total + file.size, 0),
@@ -147,6 +153,20 @@ export function UploadPanel() {
       setState({ kind: "failed", message: "Select at least one file first." });
       return;
     }
+    if (!vaultMaterial) {
+      setState({
+        kind: "failed",
+        message: "Initialize your vault and save recovery-kit.json before uploading.",
+      });
+      return;
+    }
+    if (storageStatus.kind !== "ready" || !storageStatus.ready) {
+      setState({
+        kind: "failed",
+        message: "Shelby storage is not ready. No credit has been charged.",
+      });
+      return;
+    }
 
     setState({ kind: "encrypting" });
 
@@ -155,26 +175,39 @@ export function UploadPanel() {
         files,
         label: label.trim() || "Private upload",
         category,
+        vaultPublicKey: vaultMaterial.publicKey,
       });
-      const created = await createUploadBatch({
+      const encryptedPack = await buildEncryptedPack(
+        uploadItems.map((item) => ({
+          localId: item.localId,
+          ciphertext: item.ciphertext,
+          ciphertextSha256: item.ciphertextSha256,
+          encryptedManifest: item.encryptedManifest,
+          wrappedDek: item.wrappedDek,
+          aad: item.aad,
+        })),
+      );
+      const apiItems = uploadItems.map(toApiUploadItem);
+      const uploaded = await uploadEncryptedPack({
         idempotencyKey: globalThis.crypto.randomUUID(),
         retentionDays,
-        items: uploadItems,
+        items: apiItems,
+        packBytesBase64: packBytesToBase64(encryptedPack.bytes),
+        packSha256: encryptedPack.sha256,
       });
-      const completionItems = uploadItems.map((item) => ({
-        localId: item.localId,
-        ciphertextSha256: item.ciphertextSha256,
-        stagingRef: `local-browser://${created.id}/${item.localId}`,
-      }));
-      const completed = await completeUploadBatch(created.id, {
-        items: completionItems,
-      }).catch((error) => {
-        if (isServerlessCompleteMemoryMiss(error)) {
-          return buildLocalCompletedBatch(created, completionItems);
-        }
-
-        throw error;
-      });
+      const localItemById = new Map(
+        uploadItems.map((item) => [
+          item.localId,
+          { label: item.label, category: item.category, mimeType: item.mimeType },
+        ]),
+      );
+      const completed: UploadApiBatchResponse = {
+        ...uploaded,
+        items: uploaded.items.map((item) => ({
+          ...item,
+          ...localItemById.get(item.localId),
+        })),
+      };
 
       rememberLocalUploadBatch(completed);
       setState({ kind: "ready", batch: completed });
@@ -195,8 +228,8 @@ export function UploadPanel() {
         <div>
           <h2 className="text-2xl font-semibold text-foreground">Encrypted upload</h2>
           <p className="mt-2 max-w-2xl text-muted">
-            Files are encrypted locally. The app sends ciphertext metadata,
-            wrapped DEKs, and lifecycle intent to the control plane.
+            Files are encrypted locally, packed as ciphertext, and written to
+            Shelby by the service account. Plaintext never leaves this browser.
           </p>
         </div>
       </div>
@@ -236,7 +269,7 @@ export function UploadPanel() {
 
         <label className="space-y-2">
           <span className="block text-sm font-semibold text-muted-strong">
-            Private label
+            Private local label
           </span>
           <input
             aria-label="Private label"
@@ -317,7 +350,7 @@ export function UploadPanel() {
           disabled={state.kind === "encrypting"}
           className="min-h-11 rounded bg-primary px-5 py-2 text-sm font-semibold text-[#133155] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70"
         >
-          {state.kind === "encrypting" ? "Encrypting locally..." : "Encrypt and queue upload"}
+          {state.kind === "encrypting" ? "Encrypting and writing to Shelby..." : "Encrypt and upload to Shelby"}
         </button>
       </div>
 
@@ -331,20 +364,20 @@ export function UploadPanel() {
           <p className="text-sm text-error">{state.message}</p>
         ) : null}
         {state.kind === "encrypting" ? (
-          <p className="text-sm text-muted">Encrypting chunks and wrapping file keys...</p>
+          <p className="text-sm text-muted">
+            Encrypting locally, submitting ciphertext, and waiting for on-chain verification...
+          </p>
         ) : null}
         {state.kind === "ready" ? (
           <div className="flex items-start gap-3">
             <ShieldCheck aria-hidden className="mt-0.5 h-5 w-5 text-primary" />
             <div>
               <p className="text-sm font-semibold text-foreground">
-                Control-plane batch queued:{" "}
+                Verified Shelby upload:{" "}
                 <span className="font-mono text-primary">{state.batch.id.slice(0, 8)}</span>
               </p>
               <p className="mt-1 text-sm text-muted">
-                Status is{" "}
-                <span className="font-mono text-foreground">{state.batch.status}</span>.
-                Items are ready for pack selection.
+                Status is <span className="font-mono text-foreground">{state.batch.status}</span>.
               </p>
               {state.batch.billing ? (
                 <p className="mt-1 text-sm text-muted">
@@ -355,11 +388,31 @@ export function UploadPanel() {
                   .
                 </p>
               ) : null}
-              <p className="mt-1 text-sm text-muted">
-                {storageStatus.kind === "ready" && storageStatus.ready
-                  ? "Storage writer configuration is present, but this UI only reports a chain write after a real transaction hash is returned."
-                  : "No Shelby or Aptos transaction has been submitted for this batch yet."}
-              </p>
+              {state.batch.storage ? (
+                <div className="mt-3 space-y-1 text-sm text-muted">
+                  <p>
+                    Owner: <span className="font-mono text-foreground">{shortAddress(state.batch.storage.ownerAddress)}</span>
+                  </p>
+                  <p>
+                    Blob: <span className="font-mono text-foreground">{state.batch.storage.blobName}</span>
+                  </p>
+                  {state.batch.storage.transactionHash ? (
+                    <p>
+                      Transaction: <span className="font-mono text-foreground">{shortAddress(state.batch.storage.transactionHash)}</span>
+                    </p>
+                  ) : (
+                    <p>Commitment was verified through on-chain blob metadata.</p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => downloadReceipt(state.batch)}
+                    className="mt-3 inline-flex min-h-10 items-center gap-2 rounded border border-border bg-background px-3 py-2 font-semibold text-foreground hover:border-primary"
+                  >
+                    <Download aria-hidden className="h-4 w-4" />
+                    Download receipt.json
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
         ) : null}
@@ -368,11 +421,11 @@ export function UploadPanel() {
       <div className="mt-5 grid gap-4 md:grid-cols-3">
         <HelpCard
           title="What this does"
-          body="Encrypts selected files locally, then queues only ciphertext metadata and wrapped file keys."
+          body="Encrypts selected files locally, uploads only ciphertext, and verifies the committed Shelby blob before reporting success."
         />
         <HelpCard
           title="How to use it"
-          body="Choose files, add a private label, pick a file type label, then queue the encrypted upload."
+          body="Initialize your vault, choose files, set retention, then keep the downloaded receipt with your recovery kit."
         />
         <HelpCard
           title="Security checklist"
@@ -383,42 +436,15 @@ export function UploadPanel() {
   );
 }
 
-function isServerlessCompleteMemoryMiss(error: unknown) {
-  return error instanceof Error && error.message.includes("404");
-}
-
-function buildLocalCompletedBatch(
-  created: UploadApiBatchResponse,
-  completionItems: Array<{
-    localId: string;
-    ciphertextSha256: string;
-    stagingRef: string;
-  }>,
-): UploadApiBatchResponse {
-  const completionByLocalId = new Map(
-    completionItems.map((item) => [item.localId, item] as const),
-  );
-  const now = new Date().toISOString();
-
-  return {
-    ...created,
-    status: "waiting_for_pack",
-    updatedAt: created.updatedAt ?? now,
-    items: created.items.map((item) => ({
-      ...item,
-      status: "waiting_for_pack",
-      stagingRef: completionByLocalId.get(item.localId)?.stagingRef,
-      updatedAt: item.updatedAt ?? now,
-    })),
-  };
-}
-
 async function prepareEncryptedUploadItems(input: {
   files: File[];
   label: string;
   category: FileCategory;
-}): Promise<UploadApiItemInput[]> {
-  const vaultKeyPair = await generateVaultKeyPair();
+  vaultPublicKey: string;
+}): Promise<Array<UploadApiItemInput & { ciphertext: Uint8Array; aad: string }>> {
+  const vaultPublicKey = await importVaultPublicKey(
+    base64ToBytes(input.vaultPublicKey),
+  );
 
   return Promise.all(
     input.files.map(async (file, index) => {
@@ -439,7 +465,7 @@ async function prepareEncryptedUploadItems(input: {
       );
       const wrappedDek = await wrapDekForVault({
         dek,
-        recipientPublicKey: vaultKeyPair.publicKey,
+        recipientPublicKey: vaultPublicKey,
         aad,
       });
 
@@ -461,6 +487,8 @@ async function prepareEncryptedUploadItems(input: {
           fileNameHash: await sha256Hex(new TextEncoder().encode(file.name)),
         }),
         wrappedDek: serializeWrappedDek(wrappedDek),
+        ciphertext: ciphertextBytes,
+        aad: bytesToBase64(aad),
       };
     }),
   );
@@ -472,6 +500,21 @@ function serializeWrappedDek(wrappedDek: WrappedDek) {
     enc: bytesToBase64(wrappedDek.enc),
     ciphertext: bytesToBase64(wrappedDek.ciphertext),
   });
+}
+
+function toApiUploadItem(
+  item: UploadApiItemInput & { ciphertext: Uint8Array; aad: string },
+): UploadApiItemInput {
+  return {
+    localId: item.localId,
+    label: "Encrypted file",
+    category: "other",
+    plaintextSizeBytes: item.plaintextSizeBytes,
+    ciphertextSizeBytes: item.ciphertextSizeBytes,
+    ciphertextSha256: item.ciphertextSha256,
+    encryptedManifest: item.encryptedManifest,
+    wrappedDek: item.wrappedDek,
+  };
 }
 
 function randomBytes(length: number) {
@@ -565,6 +608,40 @@ function formatBytes(bytes: number) {
     return `${(bytes / 1024).toFixed(1)} KiB`;
   }
   return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
+function shortAddress(value: string) {
+  return value.length <= 18 ? value : `${value.slice(0, 10)}...${value.slice(-6)}`;
+}
+
+function downloadReceipt(batch: UploadApiBatchResponse) {
+  if (!batch.storage || !globalThis.URL?.createObjectURL) return;
+  const receipt = {
+    format: "private-rollup-receipt",
+    formatVersion: 1,
+    batchId: batch.id,
+    storage: batch.storage,
+    retentionDays: batch.retentionDays,
+    items: batch.items.map((item) => ({
+      id: item.id,
+      localId: item.localId,
+      label: item.label,
+      category: item.category,
+      ciphertextSizeBytes: item.ciphertextSizeBytes,
+      ciphertextSha256: item.ciphertextSha256,
+      encryptedManifest: item.encryptedManifest,
+      wrappedDek: item.wrappedDek,
+    })),
+    createdAt: batch.createdAt,
+  };
+  const url = globalThis.URL.createObjectURL(
+    new Blob([JSON.stringify(receipt, null, 2)], { type: "application/json" }),
+  );
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${batch.id}.receipt.json`;
+  anchor.click();
+  globalThis.URL.revokeObjectURL?.(url);
 }
 
 function HelpCard({ title, body }: { title: string; body: string }) {

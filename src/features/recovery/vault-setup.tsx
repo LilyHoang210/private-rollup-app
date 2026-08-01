@@ -1,7 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { KeyRound } from "lucide-react";
+import { Download, KeyRound } from "lucide-react";
+import { createRecoveryKit } from "@/client/crypto/hpke";
+import {
+  downloadRecoveryKit,
+  readLocalVaultPublicMaterial,
+  saveLocalVaultPublicMaterial,
+} from "@/client/vault/local-vault";
 
 export function VaultSetupPanel() {
   const [state, setState] = useState<
@@ -9,17 +15,23 @@ export function VaultSetupPanel() {
     | { kind: "loading" }
     | { kind: "ready"; ownerFingerprint: string }
     | { kind: "failed"; message: string }
-  >({ kind: "idle" });
+  >(() => {
+    const existing = readLocalVaultPublicMaterial();
+    return existing
+      ? { kind: "ready", ownerFingerprint: existing.ownerFingerprint }
+      : { kind: "idle" };
+  });
 
   async function initializeVault() {
     setState({ kind: "loading" });
 
     try {
+      const recoveryKit = await createRecoveryKit();
       const response = await fetch("/api/vault", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          publicKeyBytes: "demo-x25519-public-key",
+          publicKeyBytes: recoveryKit.publicKey,
           algorithm: "DHKEM_X25519_HKDF_SHA256",
         }),
       });
@@ -32,6 +44,14 @@ export function VaultSetupPanel() {
       }
 
       const body = (await response.json()) as { ownerFingerprint: string };
+      saveLocalVaultPublicMaterial({
+        ...recoveryKit,
+        ownerFingerprint: body.ownerFingerprint,
+      });
+      downloadRecoveryKit({
+        ...recoveryKit,
+        ownerFingerprint: body.ownerFingerprint,
+      });
       setState({ kind: "ready", ownerFingerprint: body.ownerFingerprint });
     } catch (error) {
       setState({
@@ -53,7 +73,8 @@ export function VaultSetupPanel() {
         <div>
           <h2 className="text-2xl font-semibold text-foreground">Vault readiness</h2>
           <p className="mt-2 text-muted">
-            Register public encryption material before uploads are enabled.
+            Create your encryption key once. Only the public key is registered;
+            the downloaded recovery kit contains the private key.
           </p>
         </div>
       </div>
@@ -65,19 +86,29 @@ export function VaultSetupPanel() {
         disabled={state.kind === "loading"}
         className="mt-6 flex min-h-11 w-full items-center justify-center rounded bg-primary px-4 py-2 text-sm font-semibold text-[#133155] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70"
       >
-        {state.kind === "loading" ? "Initializing..." : "Initialize Vault"}
+        {state.kind === "loading" ? "Creating recovery kit..." : "Initialize Vault"}
       </button>
 
       <div aria-live="polite" className="mt-4 text-sm text-muted">
         {state.kind === "idle" ? "Vault public key is not registered yet." : null}
         {state.kind === "failed" ? state.message : null}
         {state.kind === "ready" ? (
-          <p>
-            Owner fingerprint{" "}
-            <span className="font-mono text-primary">
-              {state.ownerFingerprint.slice(0, 12)}...
-            </span>
-          </p>
+          <div className="space-y-2">
+            <p className="flex items-center gap-2 font-semibold text-foreground">
+              <Download aria-hidden className="h-4 w-4 text-primary" />
+              Recovery kit downloaded
+            </p>
+            <p>
+              Owner fingerprint{" "}
+              <span className="font-mono text-primary">
+                {state.ownerFingerprint.slice(0, 12)}...
+              </span>
+            </p>
+            <p>
+              Store recovery-kit.json offline. Anyone with that file can decrypt
+              your recovered data; support will never ask for it.
+            </p>
+          </div>
         ) : null}
       </div>
     </div>

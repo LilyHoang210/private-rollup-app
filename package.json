@@ -19,6 +19,7 @@
     "@aptos-labs/wallet-adapter-react": "8.3.3",
     "@hpke/core": "^1.9.0",
     "@hpke/dhkem-x25519": "^1.8.0",
+    "@shelby-protocol/sdk": "0.4.1",
     "@tanstack/react-query": "^5.101.4",
     "drizzle-orm": "^0.45.2",
     "lucide-react": "^1.28.0",

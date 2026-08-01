@@ -8,6 +8,7 @@ import {
 export type CreditLedgerEntryType =
   | "testnet_grant"
   | "upload_reserve"
+  | "upload_release"
   | "pack_settlement";
 
 export type CreditStatus = "reserved" | "settled" | "payment_required";
@@ -122,6 +123,28 @@ export function reserveUploadCredit(input: {
 export function getUploadBilling(uploadId: string) {
   const billing = billingByUploadId.get(uploadId);
   return billing ? { ...billing } : undefined;
+}
+
+export function releaseUploadCredit(userId: string, uploadId: string) {
+  const account = requireMutableAccount(requireUserId(userId));
+  const billing = billingByUploadId.get(requireUploadId(uploadId));
+  if (!billing || billing.creditStatus !== "reserved") return;
+
+  account.reservedMicrocredits = Math.max(
+    0,
+    account.reservedMicrocredits - billing.reserveMicrocredits,
+  );
+  account.availableMicrocredits =
+    account.balanceMicrocredits - account.reservedMicrocredits;
+  account.ledger.unshift({
+    id: crypto.randomUUID(),
+    type: "upload_release",
+    amountMicrocredits: 0,
+    reservedDeltaMicrocredits: -billing.reserveMicrocredits,
+    uploadId,
+    createdAt: new Date().toISOString(),
+  });
+  billingByUploadId.delete(uploadId);
 }
 
 export function settlePackCostByBytes(input: {

@@ -34,9 +34,27 @@ export interface UploadApiBatchResponse {
   retentionDays: RetentionCohort;
   totalCiphertextSizeBytes: number;
   billing?: UploadBillingResponse;
+  storage?: {
+    driver: "shelby";
+    network: "shelbynet";
+    verified: true;
+    ownerAddress: string;
+    blobId: string;
+    blobName: string;
+    blobSizeBytes: number;
+    ciphertextSha256: string;
+    transactionHash?: string;
+    expiresAt: string;
+    downloadUrl: string;
+  };
   items: UploadApiItemResponse[];
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface UploadEncryptedPackRequest extends CreateUploadBatchRequest {
+  packBytesBase64: string;
+  packSha256: string;
 }
 
 export interface CreateUploadBatchRequest {
@@ -70,6 +88,13 @@ export async function completeUploadBatch(
   return postJson(fetcher, `/api/uploads/${batchId}/complete`, input);
 }
 
+export async function uploadEncryptedPack(
+  input: UploadEncryptedPackRequest,
+  fetcher: Fetcher = fetch,
+): Promise<UploadApiBatchResponse> {
+  return postJson(fetcher, "/api/storage/upload", input);
+}
+
 export async function listUploadBatches(
   fetcher: Fetcher = fetch,
 ): Promise<{ batches: UploadApiBatchResponse[] }> {
@@ -94,7 +119,10 @@ async function postJson<TResponse>(
   });
 
   if (!response.ok) {
-    throw new Error(`Upload request failed: ${response.status}`);
+    const errorBody = await response.json().catch(() => undefined) as
+      | { message?: string }
+      | undefined;
+    throw new Error(errorBody?.message || `Upload request failed: ${response.status}`);
   }
 
   return (await response.json()) as TResponse;

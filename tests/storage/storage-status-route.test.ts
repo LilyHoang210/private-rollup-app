@@ -9,8 +9,8 @@ describe("storage status route", () => {
   it("reports Shelby writer as not ready when required configuration is missing", async () => {
     vi.stubEnv("SHELBY_DRIVER", "shelby");
     vi.stubEnv("SHELBY_NETWORK", "shelbynet");
-    vi.stubEnv("SHELBY_API_URL", "");
-    vi.stubEnv("SHELBY_CREDENTIAL_FILE", "");
+    vi.stubEnv("SHELBY_ACCOUNT_PRIVATE_KEY", "");
+    vi.stubEnv("SHELBY_LOCATION", "");
 
     const response = await GET();
 
@@ -19,8 +19,25 @@ describe("storage status route", () => {
       ready: false,
       driver: "shelby",
       network: "shelbynet",
-      missing: ["SHELBY_API_URL", "SHELBY_CREDENTIAL_FILE"],
+      missing: ["SHELBY_ACCOUNT_PRIVATE_KEY", "SHELBY_LOCATION"],
       mode: "control_plane_only",
+    });
+  });
+
+  it("reports the real Shelby writer ready with a signer and location", async () => {
+    vi.stubEnv("SHELBY_DRIVER", "shelby");
+    vi.stubEnv("SHELBY_NETWORK", "shelbynet");
+    vi.stubEnv("SHELBY_ACCOUNT_PRIVATE_KEY", "ed25519-priv-0xsecret");
+    vi.stubEnv("SHELBY_LOCATION", "shelbynet-1");
+
+    const response = await GET();
+
+    await expect(response.json()).resolves.toMatchObject({
+      ready: true,
+      driver: "shelby",
+      network: "shelbynet",
+      missing: [],
+      mode: "ready",
     });
   });
 });
