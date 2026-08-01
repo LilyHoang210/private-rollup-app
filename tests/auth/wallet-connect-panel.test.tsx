@@ -7,17 +7,39 @@ import { WalletConnectPanel } from "../../src/features/auth/wallet-connect-panel
 
 const createWalletChallenge = vi.fn();
 const verifyWalletChallenge = vi.fn();
+const connect = vi.fn();
+const signMessage = vi.fn();
+const walletState = vi.hoisted(() => ({
+  current: {
+    connected: false,
+    isLoading: false,
+    account: null as null | {
+      address: { toString: () => string };
+      publicKey: { toString: () => string };
+    },
+    connect: (...args: unknown[]) => Promise.resolve(connect(...args)),
+    signMessage: (...args: unknown[]) => signMessage(...args),
+    wallets: [] as Array<{ name: string; url?: string; icon?: string }>,
+  },
+}));
 
 vi.mock("../../src/client/api/auth", () => ({
   createWalletChallenge: (...args: unknown[]) => createWalletChallenge(...args),
   verifyWalletChallenge: (...args: unknown[]) => verifyWalletChallenge(...args),
 }));
 
+vi.mock("@aptos-labs/wallet-adapter-react", () => ({
+  useWallet: () => walletState.current,
+}));
+
 describe("wallet connect panel", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    walletState.current.connected = false;
+    walletState.current.isLoading = false;
+    walletState.current.account = null;
+    walletState.current.wallets = [];
     delete (window as unknown as { aptos?: unknown }).aptos;
-    delete (window as unknown as { martian?: unknown }).martian;
   });
 
   it("explains what to do when no Aptos wallet extension is detected", async () => {
@@ -29,22 +51,25 @@ describe("wallet connect panel", () => {
     ).toBeVisible();
   });
 
-  it("shows detected wallets and connects with the selected provider", async () => {
-    const signMessage = vi.fn().mockResolvedValue({
+  it("uses the Aptos wallet adapter instead of direct injected Petra APIs", async () => {
+    const deprecatedPetraConnect = vi.fn(() => {
+      throw new Error("Direct usage of the PetraApiClient is deprecated.");
+    });
+    (window as unknown as { aptos?: unknown }).aptos = {
+      connect: deprecatedPetraConnect,
+    };
+    walletState.current.wallets = [{ name: "Petra" }, { name: "Martian" }];
+    connect.mockImplementation(async () => {
+      walletState.current.connected = true;
+      walletState.current.account = {
+        address: { toString: () => "0xabc" },
+        publicKey: { toString: () => "0xpublic" },
+      };
+    });
+    signMessage.mockResolvedValue({
       signature: "0xsig",
       fullMessage: "APTOS\nchallenge",
     });
-    window.aptos = {
-      connect: vi.fn().mockResolvedValue({
-        address: "0xabc",
-        publicKey: "0xpublic",
-      }),
-      signMessage,
-    };
-    window.martian = {
-      connect: vi.fn(),
-      signMessage: vi.fn(),
-    };
     createWalletChallenge.mockResolvedValue({
       id: "challenge-id",
       message: "challenge",
@@ -52,13 +77,16 @@ describe("wallet connect panel", () => {
     });
     verifyWalletChallenge.mockResolvedValue({ chainId: "aptos-testnet" });
 
-    render(<WalletConnectPanel />);
+    const { rerender } = render(<WalletConnectPanel />);
 
     expect(await screen.findByRole("button", { name: "Connect Petra" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Connect Martian" })).toBeVisible();
 
     await userEvent.click(screen.getByRole("button", { name: "Connect Petra" }));
+    rerender(<WalletConnectPanel />);
 
+    expect(connect).toHaveBeenCalledWith("Petra");
+    expect(deprecatedPetraConnect).not.toHaveBeenCalled();
     expect(createWalletChallenge).toHaveBeenCalledWith({
       walletAddress: "0xabc",
       domain: "localhost",

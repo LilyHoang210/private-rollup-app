@@ -1,56 +1,61 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import Link from "next/link";
 import { Wallet, Terminal } from "lucide-react";
 import {
   createWalletChallenge,
   verifyWalletChallenge,
 } from "@/client/api/auth";
-import {
-  connectAptosWallet,
-  detectAptosWallets,
-  signAuthChallenge,
-  type DetectedAptosWallet,
-} from "@/client/wallets/aptos-wallets";
 
-type ConnectionStatus = "detecting" | "idle" | "connecting" | "connected" | "failed";
+type ConnectionStatus = "idle" | "connecting" | "connected" | "failed";
 
 export function WalletConnectPanel() {
-  const wallets = useSyncExternalStore(
-    subscribeToWalletDetection,
-    getClientWalletSnapshot,
-    getServerWalletSnapshot,
-  );
+  const { account, connect, connected, isLoading, signMessage, wallets } = useWallet();
   const [status, setStatus] = useState<ConnectionStatus>("idle");
   const [message, setMessage] = useState("");
+  const [pendingWalletName, setPendingWalletName] = useState<string | null>(null);
+  const authStartedRef = useRef(false);
   const statusMessage = message || walletDetectionMessage(wallets);
 
-  async function handleConnect(wallet: DetectedAptosWallet) {
+  useEffect(() => {
+    if (!pendingWalletName || !connected || !account || authStartedRef.current) {
+      return;
+    }
+
+    authStartedRef.current = true;
+
+    void authenticateConnectedWallet({
+      account,
+      signMessage,
+      onSuccess: (chainId, walletAddress) => {
+        setStatus("connected");
+        setPendingWalletName(null);
+        setMessage(`Connected ${shortAddress(walletAddress)} on ${chainId}.`);
+      },
+      onFailure: (error) => {
+        authStartedRef.current = false;
+        setStatus("failed");
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : "Could not verify the selected Aptos wallet.",
+        );
+      },
+    });
+  }, [account, connected, pendingWalletName, signMessage]);
+
+  async function handleConnect(walletName: string) {
     setStatus("connecting");
-    setMessage(`Waiting for ${wallet.name}. Approve the connection and signature request.`);
+    setPendingWalletName(walletName);
+    authStartedRef.current = false;
+    setMessage(`Waiting for ${walletName}. Approve the connection and signature request.`);
 
     try {
-      const account = await connectAptosWallet(wallet.provider);
-      const challenge = await createWalletChallenge({
-        walletAddress: account.address,
-        domain: window.location.hostname,
-        uri: window.location.origin,
-        chainId: "aptos-testnet",
-      });
-      const signedChallenge = await signAuthChallenge(wallet.provider, challenge.message);
-      const result = await verifyWalletChallenge({
-        challengeId: challenge.id,
-        walletAddress: account.address,
-        publicKey: account.publicKey,
-        domain: window.location.hostname,
-        signature: signedChallenge.signature,
-        fullMessage: signedChallenge.fullMessage,
-      });
-
-      setStatus("connected");
-      setMessage(`Connected ${shortAddress(account.address)} on ${result.chainId}.`);
+      await Promise.resolve(connect(walletName));
     } catch (error) {
+      setPendingWalletName(null);
       setStatus("failed");
       setMessage(
         error instanceof Error
@@ -67,11 +72,11 @@ export function WalletConnectPanel() {
           <div className="grid w-full max-w-2xl gap-3 sm:grid-cols-2">
             {wallets.map((wallet) => (
               <button
-                key={wallet.id}
-                data-action={`wallet.connect.${wallet.id}`}
+                key={wallet.name}
+                data-action={`wallet.connect.${slugWalletName(wallet.name)}`}
                 type="button"
-                onClick={() => handleConnect(wallet)}
-                disabled={status === "connecting"}
+                onClick={() => handleConnect(wallet.name)}
+                disabled={status === "connecting" || isLoading}
                 className="btn-primary inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-transparent bg-primary-container px-8 py-2 text-sm font-semibold text-primary shadow-[0_0_15px_rgba(173,200,245,0.1)] transition-colors hover:bg-[#455f87] disabled:cursor-not-allowed disabled:opacity-70"
               >
                 <Wallet aria-hidden className="h-5 w-5" />
@@ -120,35 +125,74 @@ function shortAddress(address: string) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
-const emptyWalletSnapshot: DetectedAptosWallet[] = [];
-let cachedWalletKey = "";
-let cachedWalletSnapshot: DetectedAptosWallet[] = emptyWalletSnapshot;
-
-function subscribeToWalletDetection() {
-  return () => undefined;
-}
-
-function getServerWalletSnapshot() {
-  return emptyWalletSnapshot;
-}
-
-function getClientWalletSnapshot() {
-  const detectedWallets = detectAptosWallets();
-  const walletKey = detectedWallets.map((wallet) => wallet.id).join("|");
-
-  if (walletKey === cachedWalletKey) {
-    return cachedWalletSnapshot;
-  }
-
-  cachedWalletKey = walletKey;
-  cachedWalletSnapshot = detectedWallets;
-  return detectedWallets;
-}
-
-function walletDetectionMessage(wallets: DetectedAptosWallet[]) {
+function walletDetectionMessage(wallets: ReadonlyArray<{ name: string }>) {
   if (wallets.length > 0) {
     return "Choose the wallet extension you want to use for this browser session.";
   }
 
   return "Install a supported wallet extension to continue.";
+}
+
+function slugWalletName(walletName: string) {
+  return walletName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+async function authenticateConnectedWallet({
+  account,
+  signMessage,
+  onSuccess,
+  onFailure,
+}: {
+  account: {
+    address: { toString: () => string };
+    publicKey?: { toString: () => string } | null;
+  };
+  signMessage: (message: {
+    address: boolean;
+    application: boolean;
+    chainId: boolean;
+    message: string;
+    nonce: string;
+  }) => Promise<{ signature: unknown; fullMessage?: string }>;
+  onSuccess: (chainId: string, walletAddress: string) => void;
+  onFailure: (error: unknown) => void;
+}) {
+  try {
+    const walletAddress = account.address.toString();
+    const publicKey = account.publicKey?.toString();
+
+    if (!publicKey) {
+      throw new Error("The connected wallet did not expose a public key.");
+    }
+
+    const challenge = await createWalletChallenge({
+      walletAddress,
+      domain: window.location.hostname,
+      uri: window.location.origin,
+      chainId: "aptos-testnet",
+    });
+    const signedChallenge = await signMessage({
+      address: true,
+      application: true,
+      chainId: true,
+      message: challenge.message,
+      nonce: extractChallengeNonce(challenge.message),
+    });
+    const result = await verifyWalletChallenge({
+      challengeId: challenge.id,
+      walletAddress,
+      publicKey,
+      domain: window.location.hostname,
+      signature: String(signedChallenge.signature),
+      fullMessage: signedChallenge.fullMessage,
+    });
+
+    onSuccess(result.chainId, walletAddress);
+  } catch (error) {
+    onFailure(error);
+  }
+}
+
+function extractChallengeNonce(message: string) {
+  return message.match(/^Nonce:\s*(.+)$/m)?.[1]?.trim() ?? "";
 }
