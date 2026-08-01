@@ -145,6 +145,10 @@ export const uploadBatches = pgTable(
     itemCount: integer("item_count").notNull(),
     ciphertextBytes: bigint("ciphertext_bytes", { mode: "number" }).notNull(),
     encryptedManifest: text("encrypted_manifest").notNull(),
+    stagingObjectKey: text("staging_object_key"),
+    stagingObjectUrl: text("staging_object_url"),
+    packSha256: text("pack_sha256"),
+    packId: uuid("pack_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -168,9 +172,11 @@ export const uploadItems = pgTable(
       .notNull()
       .references(() => users.id),
     localIdHash: text("local_id_hash").notNull(),
+    clientLocalId: text("client_local_id").notNull(),
     strategy: packStrategyEnum("strategy").notNull(),
     retentionDays: retentionCohortEnum("retention_days").notNull(),
     status: uploadStatusEnum("status").notNull(),
+    sourceSizeBytes: bigint("source_size_bytes", { mode: "number" }).notNull(),
     ciphertextBytes: bigint("ciphertext_bytes", { mode: "number" }).notNull(),
     ciphertextHash: text("ciphertext_hash").notNull(),
     encryptedMetadata: text("encrypted_metadata").notNull(),
@@ -201,6 +207,8 @@ export const packs = pgTable(
     status: packStatusEnum("status").notNull(),
     blobId: text("blob_id"),
     blobName: text("blob_name").notNull(),
+    ownerAddress: text("owner_address"),
+    downloadUrl: text("download_url"),
     driver: text("driver").notNull(),
     network: text("network").notNull(),
     ciphertextBytes: bigint("ciphertext_bytes", { mode: "number" }).notNull(),
@@ -214,6 +222,62 @@ export const packs = pgTable(
   (table) => [
     uniqueIndex("packs_blob_name_unique").on(table.blobName),
     index("packs_status_retention_idx").on(table.status, table.retentionDays),
+  ],
+);
+
+export const creditStatusEnum = pgEnum("credit_status", [
+  "reserved",
+  "settled",
+  "payment_required",
+]);
+
+export const creditLedgerEntryTypeEnum = pgEnum("credit_ledger_entry_type", [
+  "testnet_grant",
+  "upload_reserve",
+  "upload_release",
+  "pack_settlement",
+]);
+
+export const creditAccounts = pgTable("credit_accounts", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id),
+  balanceMicrocredits: bigint("balance_microcredits", { mode: "number" }).notNull(),
+  reservedMicrocredits: bigint("reserved_microcredits", { mode: "number" }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const uploadBillings = pgTable("upload_billings", {
+  uploadBatchId: uuid("upload_batch_id")
+    .primaryKey()
+    .references(() => uploadBatches.id),
+  reserveMicrocredits: bigint("reserve_microcredits", { mode: "number" }).notNull(),
+  settledMicrocredits: bigint("settled_microcredits", { mode: "number" }),
+  creditStatus: creditStatusEnum("credit_status").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const creditLedger = pgTable(
+  "credit_ledger",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    uploadBatchId: uuid("upload_batch_id").references(() => uploadBatches.id),
+    packId: uuid("pack_id").references(() => packs.id),
+    type: creditLedgerEntryTypeEnum("type").notNull(),
+    amountMicrocredits: bigint("amount_microcredits", { mode: "number" }).notNull(),
+    reservedDeltaMicrocredits: bigint("reserved_delta_microcredits", {
+      mode: "number",
+    }).notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("credit_ledger_idempotency_unique").on(table.idempotencyKey),
+    index("credit_ledger_user_created_idx").on(table.userId, table.createdAt),
   ],
 );
 
@@ -314,6 +378,9 @@ export const schemaTables = {
   uploadBatches,
   uploadItems,
   packs,
+  creditAccounts,
+  uploadBillings,
+  creditLedger,
   packMembers,
   receipts,
   jobs,

@@ -27,10 +27,24 @@ export async function restoreFileFromReceipt(input: {
   );
   if (!receiptItem) throw new Error("File ID was not found in the receipt");
 
-  const response = await (input.fetcher ?? fetch)(input.receipt.storage.downloadUrl);
+  const range = input.receipt.storage.packRange;
+  const response = await (input.fetcher ?? fetch)(
+    input.receipt.storage.downloadUrl,
+    range
+      ? {
+          headers: {
+            Range: `bytes=${range.byteStart}-${range.byteStart + range.byteLength - 1}`,
+          },
+        }
+      : undefined,
+  );
   if (!response.ok) throw new Error(`Shelby download failed: ${response.status}`);
-  const packBytes = new Uint8Array(await response.arrayBuffer());
-  if ((await sha256Hex(packBytes)) !== input.receipt.storage.ciphertextSha256) {
+  const downloadedBytes = new Uint8Array(await response.arrayBuffer());
+  const packBytes = range
+    ? selectMemberRange(downloadedBytes, response.status, range)
+    : downloadedBytes;
+  const expectedPackHash = range?.ciphertextSha256 ?? input.receipt.storage.ciphertextSha256;
+  if ((await sha256Hex(packBytes)) !== expectedPackHash) {
     throw new Error("Downloaded pack checksum does not match the receipt");
   }
 
@@ -94,6 +108,25 @@ export async function restoreFileFromReceipt(input: {
     suggestedFileName: `${safeFileName(receiptItem.label)}.restored`,
     mimeType: receiptItem.mimeType || "application/octet-stream",
   };
+}
+
+function selectMemberRange(
+  downloadedBytes: Uint8Array,
+  responseStatus: number,
+  range: NonNullable<PrivateRollupReceipt["storage"]["packRange"]>,
+) {
+  if (responseStatus === 206) {
+    if (downloadedBytes.byteLength !== range.byteLength) {
+      throw new Error("Shelby returned an invalid shared-pack byte range");
+    }
+    return downloadedBytes;
+  }
+
+  const end = range.byteStart + range.byteLength;
+  if (end > downloadedBytes.byteLength) {
+    throw new Error("Shared-pack byte range exceeds the downloaded blob");
+  }
+  return downloadedBytes.slice(range.byteStart, end);
 }
 
 function validateReceipt(receipt: PrivateRollupReceipt) {

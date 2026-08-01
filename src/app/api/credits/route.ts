@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedUserId } from "@/server/auth/request-session";
-import { getCreditAccount } from "@/server/billing/credit-service";
+import { getCreditAccountRuntime } from "@/server/uploads/runtime-service";
 
 export async function GET(request: Request) {
   const userId = getAuthenticatedUserId(request);
@@ -8,5 +8,5 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 401 });
   }
 
-  return NextResponse.json({ account: getCreditAccount(userId) });
+  return NextResponse.json({ account: await getCreditAccountRuntime(userId) });
 }

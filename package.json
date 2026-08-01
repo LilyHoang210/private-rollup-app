@@ -22,6 +22,7 @@
     "@hpke/dhkem-x25519": "^1.8.0",
     "@shelby-protocol/sdk": "0.4.1",
     "@tanstack/react-query": "^5.101.4",
+    "@vercel/blob": "2.3.0",
     "drizzle-orm": "^0.45.2",
     "lucide-react": "^1.28.0",
     "next": "16.2.12",

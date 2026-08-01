@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { Download } from "lucide-react";
 import { formatCredits } from "@/client/api/credits";
 import type { UploadApiBatchResponse } from "@/client/api/uploads";
 import { listUploadBatches } from "@/client/api/uploads";
@@ -9,6 +10,7 @@ import {
   mergeUploadBatches,
   readLocalUploadBatches,
 } from "@/client/uploads/local-upload-cache";
+import { downloadBatchReceipt } from "@/client/recovery/receipt-download";
 
 type UploadActivityState =
   | { kind: "loading" }
@@ -158,6 +160,16 @@ export function PacksUploadActivity() {
               />
               <PackFact label="Retention" value={`${batch.retentionDays} days`} />
               <PackFact label="Cost share" value={billingLabel(batch)} />
+              {batch.storage ? (
+                <button
+                  type="button"
+                  onClick={() => downloadBatchReceipt(batch)}
+                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded border border-border bg-background px-3 text-sm font-semibold text-foreground hover:border-primary md:col-span-5 md:justify-self-end"
+                >
+                  <Download aria-hidden className="h-4 w-4" />
+                  Download receipt
+                </button>
+              ) : null}
             </article>
           ))}
         </div>
@@ -332,6 +344,16 @@ function BatchCard({ batch }: { batch: UploadApiBatchResponse }) {
             <p className="mt-2 text-sm font-semibold text-foreground">
               {billingSummary(batch)}
             </p>
+          ) : null}
+          {batch.storage ? (
+            <button
+              type="button"
+              onClick={() => downloadBatchReceipt(batch)}
+              className="mt-3 inline-flex min-h-10 items-center gap-2 rounded border border-border bg-surface px-3 py-2 text-sm font-semibold text-foreground hover:border-primary"
+            >
+              <Download aria-hidden className="h-4 w-4" />
+              Download receipt
+            </button>
           ) : null}
         </div>
         <span className="rounded-full border border-primary/40 px-3 py-1 font-mono text-xs text-primary">

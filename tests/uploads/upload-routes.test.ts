@@ -66,13 +66,11 @@ describe("upload API routes", () => {
         method: "POST",
         headers: authHeaders("a".repeat(64)),
         body: JSON.stringify({
-          items: [
-            {
-              localId: "file-1",
-              ciphertextSha256: "d".repeat(64),
-              stagingRef: "staging://uploads/file-1",
-            },
-          ],
+          stagingObjectKey: `staging/${created.id}/member.prp`,
+          stagingObjectUrl:
+            "https://example.private.blob.vercel-storage.com/staging/member.prp",
+          packSha256: "f".repeat(64),
+          packSizeBytes: 1200,
         }),
       }),
       { params: Promise.resolve({ uploadId: created.id }) },

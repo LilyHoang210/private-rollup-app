@@ -7,6 +7,15 @@ import { createRecoveryKit } from "../../src/client/crypto/hpke";
 import { saveLocalVaultPublicMaterial } from "../../src/client/vault/local-vault";
 import { UploadPanel } from "../../src/features/upload/upload-panel";
 
+const { stageUploadMock } = vi.hoisted(() => ({
+  stageUploadMock: vi.fn(async (pathname: string) => ({
+    pathname,
+    url: `https://store.private.blob.vercel-storage.com/${pathname}`,
+  })),
+}));
+
+vi.mock("@vercel/blob/client", () => ({ upload: stageUploadMock }));
+
 describe("upload panel", () => {
   beforeEach(async () => {
     localStorage.clear();
@@ -17,7 +26,7 @@ describe("upload panel", () => {
     vi.restoreAllMocks();
   });
 
-  it("uploads an encrypted pack and reports only verified Shelby success", async () => {
+  it("stages ciphertext directly and reports a queued shared pack", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
       async (input, init) => {
         const url = String(input);
@@ -27,8 +36,11 @@ describe("upload panel", () => {
         if (url.includes("/api/credits")) {
           return Response.json(creditFixture());
         }
-        if (url === "/api/storage/upload" && init?.method === "POST") {
-          return Response.json(uploadFixture(), { status: 201 });
+        if (url === "/api/uploads" && init?.method === "POST") {
+          return Response.json(uploadFixture("staging"), { status: 201 });
+        }
+        if (url.includes("/api/uploads/batch-1/complete") && init?.method === "POST") {
+          return Response.json(uploadFixture("waiting_for_pack"));
         }
         return Response.json({ error: "NOT_FOUND" }, { status: 404 });
       },
@@ -41,18 +53,22 @@ describe("upload panel", () => {
     );
     await userEvent.type(screen.getByLabelText("Private local label"), "Personal docs");
     await userEvent.click(
-      screen.getByRole("button", { name: "Encrypt and upload to Shelby" }),
+      screen.getByRole("button", { name: "Encrypt and join a pack" }),
     );
 
-    expect(await screen.findByText(/Verified Shelby upload/i)).toBeVisible();
-    expect(screen.getByText("private-rollup/batch-1.prp")).toBeVisible();
+    expect(await screen.findByText(/Encrypted upload queued/i)).toBeVisible();
     const uploadCall = fetchMock.mock.calls.find(
-      (call) => call[0] === "/api/storage/upload",
+      (call) => call[0] === "/api/uploads",
     );
     expect(uploadCall?.[1]).toMatchObject({ method: "POST" });
     expect(String(uploadCall?.[1]?.body)).not.toContain("super secret plaintext");
     expect(String(uploadCall?.[1]?.body)).not.toContain("Personal docs");
-    expect(String(uploadCall?.[1]?.body)).toContain("packBytesBase64");
+    expect(String(uploadCall?.[1]?.body)).not.toContain("packBytesBase64");
+    expect(stageUploadMock).toHaveBeenCalledWith(
+      expect.stringMatching(/^staging\/batch-1\/.+\.prp$/),
+      expect.any(Blob),
+      expect.objectContaining({ access: "private" }),
+    );
     expect(localStorage.getItem("private-rollup:upload-batches:v1")).toContain(
       "batch-1",
     );
@@ -79,11 +95,11 @@ describe("upload panel", () => {
       new File(["hello"], "hello.txt", { type: "text/plain" }),
     );
     await userEvent.click(
-      screen.getByRole("button", { name: "Encrypt and upload to Shelby" }),
+      screen.getByRole("button", { name: "Encrypt and join a pack" }),
     );
 
     expect(await screen.findByText(/Shelby storage is not ready/)).toBeVisible();
-    expect(fetchMock.mock.calls.some((call) => call[0] === "/api/storage/upload")).toBe(
+    expect(fetchMock.mock.calls.some((call) => call[0] === "/api/uploads")).toBe(
       false,
     );
   });
@@ -105,7 +121,7 @@ describe("upload panel", () => {
       new File(["hello"], "hello.txt", { type: "text/plain" }),
     );
     await userEvent.click(
-      screen.getByRole("button", { name: "Encrypt and upload to Shelby" }),
+      screen.getByRole("button", { name: "Encrypt and join a pack" }),
     );
 
     expect(
@@ -137,10 +153,10 @@ function creditFixture() {
   };
 }
 
-function uploadFixture() {
+function uploadFixture(status: "staging" | "waiting_for_pack") {
   return {
     id: "batch-1",
-    status: "available",
+    status,
     retentionDays: 90,
     totalCiphertextSizeBytes: 38,
     billing: { creditStatus: "reserved", reserveMicrocredits: 1_500 },
@@ -155,23 +171,9 @@ function uploadFixture() {
         ciphertextSha256: "f".repeat(64),
         encryptedManifest: "manifest",
         wrappedDek: "dek",
-        status: "available",
+        status,
         packStrategy: "shared_pack",
       },
     ],
-    storage: {
-      driver: "shelby",
-      network: "shelbynet",
-      verified: true,
-      ownerAddress: "0xservice",
-      blobId: "42",
-      blobName: "private-rollup/batch-1.prp",
-      blobSizeBytes: 100,
-      ciphertextSha256: "a".repeat(64),
-      transactionHash: "0xabc",
-      expiresAt: "2026-10-30T00:00:00.000Z",
-      downloadUrl:
-        "https://api.shelbynet.shelby.xyz/shelby/v1/blobs/0xservice/private-rollup/batch-1.prp",
-    },
   };
 }

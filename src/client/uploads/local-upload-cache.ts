@@ -35,10 +35,10 @@ export function rememberLocalUploadBatch(
     return;
   }
 
-  const next = mergeUploadBatches([batch], readLocalUploadBatches(storage)).slice(
-    0,
-    MAX_LOCAL_BATCHES,
-  );
+  const next = [
+    batch,
+    ...readLocalUploadBatches(storage).filter((item) => item.id !== batch.id),
+  ].slice(0, MAX_LOCAL_BATCHES);
   storage.setItem(LOCAL_UPLOAD_BATCHES_KEY, JSON.stringify(next));
 }
 
@@ -46,16 +46,28 @@ export function mergeUploadBatches(
   apiBatches: UploadApiBatchResponse[],
   localBatches: UploadApiBatchResponse[],
 ): UploadApiBatchResponse[] {
-  const seen = new Set<string>();
-  const merged: UploadApiBatchResponse[] = [];
-
-  for (const batch of [...apiBatches, ...localBatches]) {
-    if (!batch.id || seen.has(batch.id)) {
-      continue;
-    }
-    seen.add(batch.id);
-    merged.push(batch);
-  }
+  const localById = new Map(localBatches.map((batch) => [batch.id, batch]));
+  const apiIds = new Set(apiBatches.map((batch) => batch.id));
+  const merged = apiBatches.map((apiBatch) => {
+    const local = localById.get(apiBatch.id);
+    if (!local) return apiBatch;
+    const localItems = new Map(local.items.map((item) => [item.localId, item]));
+    return {
+      ...apiBatch,
+      items: apiBatch.items.map((item) => {
+        const privateItem = localItems.get(item.localId);
+        return privateItem
+          ? {
+              ...item,
+              label: privateItem.label,
+              category: privateItem.category,
+              mimeType: privateItem.mimeType,
+            }
+          : item;
+      }),
+    };
+  });
+  merged.push(...localBatches.filter((batch) => !apiIds.has(batch.id)));
 
   return merged.sort((left, right) =>
     String(right.createdAt ?? "").localeCompare(String(left.createdAt ?? "")),

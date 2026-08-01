@@ -11,6 +11,8 @@ describe("storage status route", () => {
     vi.stubEnv("SHELBY_NETWORK", "shelbynet");
     vi.stubEnv("SHELBY_ACCOUNT_PRIVATE_KEY", "");
     vi.stubEnv("SHELBY_LOCATION", "");
+    vi.stubEnv("DATABASE_URL", "");
+    vi.stubEnv("BLOB_READ_WRITE_TOKEN", "");
 
     const response = await GET();
 
@@ -19,8 +21,13 @@ describe("storage status route", () => {
       ready: false,
       driver: "shelby",
       network: "shelbynet",
-      missing: ["SHELBY_ACCOUNT_PRIVATE_KEY", "SHELBY_LOCATION"],
-      mode: "control_plane_only",
+      missing: [
+        "SHELBY_ACCOUNT_PRIVATE_KEY",
+        "SHELBY_LOCATION",
+        "DATABASE_URL",
+        "BLOB_READ_WRITE_TOKEN",
+      ],
+      mode: "configuration_required",
     });
   });
 
@@ -29,6 +36,8 @@ describe("storage status route", () => {
     vi.stubEnv("SHELBY_NETWORK", "shelbynet");
     vi.stubEnv("SHELBY_ACCOUNT_PRIVATE_KEY", "ed25519-priv-0xsecret");
     vi.stubEnv("SHELBY_LOCATION", "shelbynet-1");
+    vi.stubEnv("DATABASE_URL", "postgres://example.test/private-rollup");
+    vi.stubEnv("BLOB_READ_WRITE_TOKEN", "vercel_blob_rw_test");
 
     const response = await GET();
 
@@ -37,7 +46,7 @@ describe("storage status route", () => {
       driver: "shelby",
       network: "shelbynet",
       missing: [],
-      mode: "ready",
+      mode: "durable_shared_packs",
     });
   });
 });

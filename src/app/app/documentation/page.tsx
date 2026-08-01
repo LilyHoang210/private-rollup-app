@@ -181,6 +181,48 @@ export default function DocumentationPage() {
       </section>
 
       <section className="rounded-xl border border-border bg-surface p-6">
+        <h2 className="text-2xl font-semibold text-foreground">
+          How a shared pack works
+        </h2>
+        <p className="mt-2 max-w-3xl text-muted">
+          Shared packs reduce repeated storage operations by combining encrypted
+          contributions that use the same retention period. Files are never mixed
+          as plaintext; the service only handles encrypted pack bytes.
+        </p>
+        <ol className="mt-5 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <LifecycleStep
+            number="1"
+            title="Encrypt locally"
+            body="Your browser creates a unique file key, encrypts file chunks, and wraps that key for your recovery kit."
+          />
+          <LifecycleStep
+            number="2"
+            title="Stage privately"
+            body="Ciphertext goes directly to private temporary storage. The web server receives metadata, checksums, and a private object reference; it never receives plaintext."
+          />
+          <LifecycleStep
+            number="3"
+            title="Seal and verify"
+            body="The worker combines compatible encrypted packs, writes one blob to Shelby, and verifies the blob metadata before reporting success."
+          />
+          <LifecycleStep
+            number="4"
+            title="Settle by bytes"
+            body="The testnet pack cost is divided by each batch's encrypted byte range. Temporary staging is removed only after durable completion."
+          />
+        </ol>
+        <div className="mt-5 rounded-xl border border-primary/40 bg-background p-5 text-sm leading-relaxed text-muted">
+          <p className="font-semibold text-foreground">When should I use Seal pack now?</p>
+          <p className="mt-2">
+            Use it for a test restore or an urgent upload. Waiting allows more
+            compatible ciphertext to share the pack, while sealing immediately may
+            create a smaller pack with less cost sharing. A receipt appears only
+            after Shelby verification; download it from Upload, Dashboard, or Packs.
+          </p>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-border bg-surface p-6">
         <h2 className="text-2xl font-semibold text-foreground">CLI recovery commands</h2>
         <p className="mt-2 max-w-3xl text-muted">
           Copy one command at a time. The CLI uses file paths on your machine.
@@ -282,5 +324,25 @@ function FAQ({ question, answer }: { question: string; answer: string }) {
       <h2 className="text-lg font-semibold text-foreground">{question}</h2>
       <p className="mt-3 text-sm leading-relaxed text-muted">{answer}</p>
     </article>
+  );
+}
+
+function LifecycleStep({
+  body,
+  number,
+  title,
+}: {
+  body: string;
+  number: string;
+  title: string;
+}) {
+  return (
+    <li className="list-none rounded-xl border border-border bg-background p-5">
+      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary font-mono text-sm font-bold text-[#133155]">
+        {number}
+      </span>
+      <h3 className="mt-4 text-lg font-semibold text-foreground">{title}</h3>
+      <p className="mt-2 text-sm leading-relaxed text-muted">{body}</p>
+    </li>
   );
 }

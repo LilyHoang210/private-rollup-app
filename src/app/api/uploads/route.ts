@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { DomainError } from "@/domain/errors";
 import { getAuthenticatedUserId } from "@/server/auth/request-session";
-import { createUploadBatch, listUploadBatchesForUser } from "@/server/uploads/service";
+import {
+  createUploadBatchRuntime,
+  listUploadBatchesForUserRuntime,
+} from "@/server/uploads/runtime-service";
 
 const uploadItemSchema = z
   .object({
@@ -41,7 +44,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 401 });
   }
 
-  return NextResponse.json({ batches: listUploadBatchesForUser(userId) });
+  return NextResponse.json({ batches: await listUploadBatchesForUserRuntime(userId) });
 }
 
 export async function POST(request: Request) {
@@ -57,7 +60,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const batch = createUploadBatch({
+    const batch = await createUploadBatchRuntime({
       userId,
       ...body.data,
     });

@@ -1,12 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Download, FolderUp, ShieldCheck, UploadCloud } from "lucide-react";
+import { Download, FolderUp, PackageCheck, ShieldCheck, UploadCloud } from "lucide-react";
 import { formatCredits, getCreditAccount } from "@/client/api/credits";
 import { estimateReserveMicrocredits } from "@/domain/credits";
 import type { FileCategory, RetentionCohort } from "@/domain/files";
 import {
-  uploadEncryptedPack,
+  completeUploadBatch,
+  closePackNow,
+  createUploadBatch,
+  getUploadBatchById,
+  stageEncryptedPack,
   type UploadApiBatchResponse,
   type UploadApiItemInput,
 } from "@/client/api/uploads";
@@ -14,7 +18,6 @@ import { rememberLocalUploadBatch } from "@/client/uploads/local-upload-cache";
 import {
   base64ToBytes,
   buildEncryptedPack,
-  bytesToBase64 as packBytesToBase64,
 } from "@/client/uploads/encrypted-pack";
 import { encryptChunkedPayload } from "@/client/crypto/chunk-encrypt";
 import {
@@ -23,6 +26,7 @@ import {
   type WrappedDek,
 } from "@/client/crypto/hpke";
 import { readLocalVaultPublicMaterial } from "@/client/vault/local-vault";
+import { downloadBatchReceipt } from "@/client/recovery/receipt-download";
 
 const CHUNK_SIZE_BYTES = 1024 * 1024;
 const categoryOptions: FileCategory[] = [
@@ -73,6 +77,7 @@ export function UploadPanel() {
     kind: "loading",
   });
   const [creditState, setCreditState] = useState<CreditState>({ kind: "loading" });
+  const [isClosingPack, setIsClosingPack] = useState(false);
   const [vaultMaterial] = useState(() => readLocalVaultPublicMaterial());
 
   const selectedSize = useMemo(
@@ -188,12 +193,20 @@ export function UploadPanel() {
         })),
       );
       const apiItems = uploadItems.map(toApiUploadItem);
-      const uploaded = await uploadEncryptedPack({
+      const created = await createUploadBatch({
         idempotencyKey: globalThis.crypto.randomUUID(),
         retentionDays,
         items: apiItems,
-        packBytesBase64: packBytesToBase64(encryptedPack.bytes),
+      });
+      const staged = await stageEncryptedPack({
+        batchId: created.id,
+        bytes: encryptedPack.bytes,
+      });
+      const uploaded = await completeUploadBatch(created.id, {
+        stagingObjectKey: staged.pathname,
+        stagingObjectUrl: staged.url,
         packSha256: encryptedPack.sha256,
+        packSizeBytes: encryptedPack.bytes.byteLength,
       });
       const localItemById = new Map(
         uploadItems.map((item) => [
@@ -216,6 +229,37 @@ export function UploadPanel() {
         kind: "failed",
         message: error instanceof Error ? error.message : "Upload failed.",
       });
+    }
+  }
+
+  async function sealPackNow(batch: UploadApiBatchResponse) {
+    setIsClosingPack(true);
+    try {
+      await closePackNow(batch.id);
+      const refreshed = await getUploadBatchById(batch.id);
+      const privateItems = new Map(
+        batch.items.map((item) => [
+          item.localId,
+          { label: item.label, category: item.category, mimeType: item.mimeType },
+        ]),
+      );
+      const completed = {
+        ...refreshed,
+        items: refreshed.items.map((item) => ({
+          ...item,
+          ...privateItems.get(item.localId),
+        })),
+      };
+      rememberLocalUploadBatch(completed);
+      setState({ kind: "ready", batch: completed });
+    } catch (error) {
+      setState({
+        kind: "failed",
+        message:
+          error instanceof Error ? error.message : "The pack could not be closed.",
+      });
+    } finally {
+      setIsClosingPack(false);
     }
   }
 
@@ -350,7 +394,7 @@ export function UploadPanel() {
           disabled={state.kind === "encrypting"}
           className="min-h-11 rounded bg-primary px-5 py-2 text-sm font-semibold text-[#133155] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70"
         >
-          {state.kind === "encrypting" ? "Encrypting and writing to Shelby..." : "Encrypt and upload to Shelby"}
+          {state.kind === "encrypting" ? "Encrypting and staging ciphertext..." : "Encrypt and join a pack"}
         </button>
       </div>
 
@@ -365,7 +409,7 @@ export function UploadPanel() {
         ) : null}
         {state.kind === "encrypting" ? (
           <p className="text-sm text-muted">
-            Encrypting locally, submitting ciphertext, and waiting for on-chain verification...
+            Encrypting locally and staging ciphertext for a shared Shelby pack...
           </p>
         ) : null}
         {state.kind === "ready" ? (
@@ -373,7 +417,7 @@ export function UploadPanel() {
             <ShieldCheck aria-hidden className="mt-0.5 h-5 w-5 text-primary" />
             <div>
               <p className="text-sm font-semibold text-foreground">
-                Verified Shelby upload:{" "}
+                {state.batch.storage ? "Verified Shelby upload" : "Encrypted upload queued"}:{" "}
                 <span className="font-mono text-primary">{state.batch.id.slice(0, 8)}</span>
               </p>
               <p className="mt-1 text-sm text-muted">
@@ -405,14 +449,35 @@ export function UploadPanel() {
                   )}
                   <button
                     type="button"
-                    onClick={() => downloadReceipt(state.batch)}
+                    onClick={() => downloadBatchReceipt(state.batch)}
                     className="mt-3 inline-flex min-h-10 items-center gap-2 rounded border border-border bg-background px-3 py-2 font-semibold text-foreground hover:border-primary"
                   >
                     <Download aria-hidden className="h-4 w-4" />
                     Download receipt.json
                   </button>
                 </div>
-              ) : null}
+              ) : (
+                <div className="mt-3 rounded-lg border border-border bg-background p-4">
+                  <p className="text-sm text-muted">
+                    Your encrypted bytes are in private staging. A shared pack can
+                    accept other uploads with the same retention period before it
+                    is committed to Shelby.
+                  </p>
+                  <button
+                    type="button"
+                    disabled={isClosingPack}
+                    onClick={() => void sealPackNow(state.batch)}
+                    className="mt-3 inline-flex min-h-10 items-center gap-2 rounded border border-border bg-surface px-3 py-2 font-semibold text-foreground hover:border-primary disabled:opacity-60"
+                  >
+                    <PackageCheck aria-hidden className="h-4 w-4" />
+                    {isClosingPack ? "Closing and verifying pack..." : "Seal pack now"}
+                  </button>
+                  <p className="mt-2 text-xs text-muted">
+                    Sealing now is useful for testing or urgent storage, but may
+                    produce a smaller pack with less cost sharing.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         ) : null}
@@ -421,11 +486,11 @@ export function UploadPanel() {
       <div className="mt-5 grid gap-4 md:grid-cols-3">
         <HelpCard
           title="What this does"
-          body="Encrypts selected files locally, uploads only ciphertext, and verifies the committed Shelby blob before reporting success."
+          body="Encrypts selected files locally and uploads only ciphertext to private staging. The service combines queued ciphertext into a shared Shelby blob."
         />
         <HelpCard
           title="How to use it"
-          body="Initialize your vault, choose files, set retention, then keep the downloaded receipt with your recovery kit."
+          body="Initialize your vault, choose files, set retention, and join a pack. Return to Packs for verification and receipt export after the pack closes."
         />
         <HelpCard
           title="Security checklist"
@@ -612,37 +677,6 @@ function formatBytes(bytes: number) {
 
 function shortAddress(value: string) {
   return value.length <= 18 ? value : `${value.slice(0, 10)}...${value.slice(-6)}`;
-}
-
-function downloadReceipt(batch: UploadApiBatchResponse) {
-  if (!batch.storage || !globalThis.URL?.createObjectURL) return;
-  const receipt = {
-    format: "private-rollup-receipt",
-    formatVersion: 1,
-    batchId: batch.id,
-    storage: batch.storage,
-    retentionDays: batch.retentionDays,
-    items: batch.items.map((item) => ({
-      id: item.id,
-      localId: item.localId,
-      label: item.label,
-      category: item.category,
-      mimeType: item.mimeType,
-      ciphertextSizeBytes: item.ciphertextSizeBytes,
-      ciphertextSha256: item.ciphertextSha256,
-      encryptedManifest: item.encryptedManifest,
-      wrappedDek: item.wrappedDek,
-    })),
-    createdAt: batch.createdAt,
-  };
-  const url = globalThis.URL.createObjectURL(
-    new Blob([JSON.stringify(receipt, null, 2)], { type: "application/json" }),
-  );
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `${batch.id}.receipt.json`;
-  anchor.click();
-  globalThis.URL.revokeObjectURL?.(url);
 }
 
 function HelpCard({ title, body }: { title: string; body: string }) {

@@ -8,6 +8,27 @@
       "when": 1785500014061,
       "tag": "0000_lonely_jean_grey",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785599783258,
+      "tag": "0001_quiet_skrulls",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785599821636,
+      "tag": "0002_fantastic_black_panther",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785599850731,
+      "tag": "0003_bored_sharon_ventura",
+      "breakpoints": true
     }
   ]
 }

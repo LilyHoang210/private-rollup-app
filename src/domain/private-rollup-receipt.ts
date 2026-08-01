@@ -15,6 +15,11 @@ export interface PrivateRollupReceipt {
     blobName: string;
     blobSizeBytes: number;
     ciphertextSha256: string;
+    packRange?: {
+      byteStart: number;
+      byteLength: number;
+      ciphertextSha256: string;
+    };
     transactionHash?: string;
     expiresAt: string;
     downloadUrl: string;

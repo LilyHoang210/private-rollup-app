@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { DomainError } from "@/domain/errors";
 import { getAuthenticatedUserId } from "@/server/auth/request-session";
-import { completeUploadBatch } from "@/server/uploads/service";
+import { completeUploadBatchRuntime } from "@/server/uploads/runtime-service";
 
 interface CompleteUploadRouteContext {
   params: Promise<{ uploadId: string }>;
@@ -10,18 +10,10 @@ interface CompleteUploadRouteContext {
 
 const completeUploadSchema = z
   .object({
-    items: z
-      .array(
-        z
-          .object({
-            localId: z.string().min(1),
-            ciphertextSha256: z.string().regex(/^[a-f0-9]{64}$/i),
-            stagingRef: z.string().min(1),
-          })
-          .strict(),
-      )
-      .min(1)
-      .max(1000),
+    stagingObjectKey: z.string().min(1),
+    stagingObjectUrl: z.string().url(),
+    packSha256: z.string().regex(/^[a-f0-9]{64}$/i),
+    packSizeBytes: z.number().int().positive(),
   })
   .strict();
 
@@ -38,10 +30,10 @@ export async function POST(request: Request, context: CompleteUploadRouteContext
 
   const { uploadId } = await context.params;
   try {
-    const batch = completeUploadBatch({
+    const batch = await completeUploadBatchRuntime({
       userId,
       batchId: uploadId,
-      items: body.data.items,
+      ...body.data,
     });
 
     return NextResponse.json(batch);

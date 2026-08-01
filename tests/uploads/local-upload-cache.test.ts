@@ -34,7 +34,15 @@ describe("local upload cache", () => {
     const duplicateLocalBatch = batchFixture("batch-1", "Stale local upload", 50);
 
     expect(mergeUploadBatches([apiBatch], [localOnlyBatch, duplicateLocalBatch])).toEqual([
-      apiBatch,
+      {
+        ...apiBatch,
+        items: [
+          {
+            ...apiBatch.items[0],
+            label: "Stale local upload",
+          },
+        ],
+      },
       localOnlyBatch,
     ]);
   });

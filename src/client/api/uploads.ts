@@ -1,5 +1,6 @@
 import type { FileCategory, RetentionCohort } from "@/domain/files";
 import type { UploadStatus } from "@/domain/uploads";
+import { upload } from "@vercel/blob/client";
 
 export interface UploadApiItemInput {
   localId: string;
@@ -43,6 +44,11 @@ export interface UploadApiBatchResponse {
     blobName: string;
     blobSizeBytes: number;
     ciphertextSha256: string;
+    packRange?: {
+      byteStart: number;
+      byteLength: number;
+      ciphertextSha256: string;
+    };
     transactionHash?: string;
     expiresAt: string;
     downloadUrl: string;
@@ -64,11 +70,10 @@ export interface CreateUploadBatchRequest {
 }
 
 export interface CompleteUploadBatchRequest {
-  items: Array<{
-    localId: string;
-    ciphertextSha256: string;
-    stagingRef: string;
-  }>;
+  stagingObjectKey: string;
+  stagingObjectUrl: string;
+  packSha256: string;
+  packSizeBytes: number;
 }
 
 type Fetcher = typeof fetch;
@@ -93,6 +98,45 @@ export async function uploadEncryptedPack(
   fetcher: Fetcher = fetch,
 ): Promise<UploadApiBatchResponse> {
   return postJson(fetcher, "/api/storage/upload", input);
+}
+
+export async function stageEncryptedPack(input: {
+  batchId: string;
+  bytes: Uint8Array;
+}) {
+  const pathname = `staging/${input.batchId}/${crypto.randomUUID()}.prp`;
+  const bytes = new ArrayBuffer(input.bytes.byteLength);
+  new Uint8Array(bytes).set(input.bytes);
+  const result = await upload(
+    pathname,
+    new Blob([bytes], { type: "application/x-private-rollup" }),
+    {
+      access: "private",
+      handleUploadUrl: "/api/staging/upload",
+      clientPayload: JSON.stringify({ batchId: input.batchId }),
+    },
+  );
+  return { pathname: result.pathname, url: result.url };
+}
+
+export async function getUploadBatchById(
+  batchId: string,
+  fetcher: Fetcher = fetch,
+): Promise<UploadApiBatchResponse> {
+  const response = await fetcher(`/api/uploads/${batchId}`);
+  if (!response.ok) throw new Error(`Upload status request failed: ${response.status}`);
+  return (await response.json()) as UploadApiBatchResponse;
+}
+
+export async function closePackNow(
+  batchId: string,
+  fetcher: Fetcher = fetch,
+) {
+  return postJson<{ status: "idle" | "verified"; packId?: string; batchIds: string[] }>(
+    fetcher,
+    "/api/packs/close",
+    { batchId },
+  );
 }
 
 export async function listUploadBatches(
