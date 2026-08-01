@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Account } from "@aptos-labs/ts-sdk";
 import { POST as createChallenge } from "../../src/app/api/auth/challenge/route";
+import { POST as logout } from "../../src/app/api/auth/logout/route";
 import { GET as getSession } from "../../src/app/api/auth/session/route";
 import { POST as verifyChallenge } from "../../src/app/api/auth/verify/route";
 
@@ -57,5 +58,13 @@ describe("auth API routes", () => {
       chainId: "aptos-testnet",
       walletAddressHash: expect.any(String),
     });
+  });
+
+  it("clears the wallet session cookie on logout", async () => {
+    const response = await logout();
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("set-cookie")).toContain("pr_session=");
+    expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
   });
 });

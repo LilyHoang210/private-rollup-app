@@ -111,6 +111,22 @@ export function createSessionCookie(input: {
   return parts.join("; ");
 }
 
+export function createExpiredSessionCookie(input: { secure: boolean }) {
+  const parts = [
+    `${SESSION_COOKIE_NAME}=`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+    "Max-Age=0",
+  ];
+
+  if (input.secure) {
+    parts.push("Secure");
+  }
+
+  return parts.join("; ");
+}
+
 function signSessionPayload(encodedPayload: string, secret?: string) {
   return createHmac("sha256", sessionSecret(secret))
     .update(encodedPayload, "utf8")
