@@ -130,6 +130,6 @@ describe("wallet connect panel", () => {
       fullMessage: "APTOS\nchallenge",
     });
     expect(await screen.findByText(/Connected 0xabc on aptos-testnet/)).toBeVisible();
-    expect(routerPush).toHaveBeenCalledWith("/app");
+    expect(routerPush).toHaveBeenCalledWith("/app/setup");
   });
 });

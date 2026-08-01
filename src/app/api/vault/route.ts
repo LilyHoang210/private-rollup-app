@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { getAuthenticatedUserId } from "@/server/auth/request-session";
 import { createVaultPublicKeyRecord } from "@/server/vault/service";
 
 const vaultRequestSchema = z
@@ -10,6 +11,11 @@ const vaultRequestSchema = z
   .strict();
 
 export async function POST(request: Request) {
+  const userId = getAuthenticatedUserId(request);
+  if (!userId) {
+    return NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 401 });
+  }
+
   const body = vaultRequestSchema.safeParse(await request.json());
 
   if (!body.success) {
@@ -17,7 +23,7 @@ export async function POST(request: Request) {
   }
 
   const record = createVaultPublicKeyRecord({
-    userId: "demo-user",
+    userId,
     ...body.data,
   });
 

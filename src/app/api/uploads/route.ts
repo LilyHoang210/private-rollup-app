@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { DomainError } from "@/domain/errors";
+import { getAuthenticatedUserId } from "@/server/auth/request-session";
 import { createUploadBatch } from "@/server/uploads/service";
 
 const uploadItemSchema = z
@@ -35,6 +36,11 @@ const createUploadSchema = z
   .strict();
 
 export async function POST(request: Request) {
+  const userId = getAuthenticatedUserId(request);
+  if (!userId) {
+    return NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 401 });
+  }
+
   const body = createUploadSchema.safeParse(await request.json());
 
   if (!body.success) {
@@ -43,7 +49,7 @@ export async function POST(request: Request) {
 
   try {
     const batch = createUploadBatch({
-      userId: "demo-user",
+      userId,
       ...body.data,
     });
 

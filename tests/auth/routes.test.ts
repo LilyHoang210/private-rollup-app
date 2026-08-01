@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Account } from "@aptos-labs/ts-sdk";
 import { POST as createChallenge } from "../../src/app/api/auth/challenge/route";
+import { GET as getSession } from "../../src/app/api/auth/session/route";
 import { POST as verifyChallenge } from "../../src/app/api/auth/verify/route";
 
 describe("auth API routes", () => {
@@ -38,9 +39,23 @@ describe("auth API routes", () => {
       );
 
     expect(verifyResponse.status).toBe(200);
-    expect(verifyResponse.headers.get("set-cookie")).toContain("HttpOnly");
+    const setCookie = verifyResponse.headers.get("set-cookie");
+    expect(setCookie).toContain("HttpOnly");
     expect(await verifyResponse.json()).toMatchObject({
       chainId: "aptos-testnet",
+    });
+
+    const sessionResponse = await getSession(
+      new Request("http://localhost/api/auth/session", {
+        headers: { Cookie: setCookie?.split(";")[0] ?? "" },
+      }),
+    );
+
+    expect(sessionResponse.status).toBe(200);
+    await expect(sessionResponse.json()).resolves.toMatchObject({
+      authenticated: true,
+      chainId: "aptos-testnet",
+      walletAddressHash: expect.any(String),
     });
   });
 });

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { DomainError } from "@/domain/errors";
+import { getAuthenticatedUserId } from "@/server/auth/request-session";
 import { completeUploadBatch } from "@/server/uploads/service";
 
 interface CompleteUploadRouteContext {
@@ -25,6 +26,11 @@ const completeUploadSchema = z
   .strict();
 
 export async function POST(request: Request, context: CompleteUploadRouteContext) {
+  const userId = getAuthenticatedUserId(request);
+  if (!userId) {
+    return NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 401 });
+  }
+
   const body = completeUploadSchema.safeParse(await request.json());
   if (!body.success) {
     return NextResponse.json({ error: "UPLOAD_COMPLETE_INVALID" }, { status: 400 });
@@ -33,7 +39,7 @@ export async function POST(request: Request, context: CompleteUploadRouteContext
   const { uploadId } = await context.params;
   try {
     const batch = completeUploadBatch({
-      userId: "demo-user",
+      userId,
       batchId: uploadId,
       items: body.data.items,
     });

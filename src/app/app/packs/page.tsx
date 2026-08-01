@@ -41,19 +41,31 @@ export default function PacksPage() {
           </select>
         </div>
 
-        <div className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-3">
-          {["Alpha-Genesis-92", "Beta-Storage-04", "Gamma-Vault-11"].map((pack) => (
-            <Link
-              key={pack}
-              data-action="packs.open_detail"
-              href="/app/packs/alpha-genesis-92"
-              className="rounded-xl border border-border bg-background p-5 transition-colors hover:border-primary"
-            >
-              <p className="font-mono text-sm text-foreground">{pack}</p>
-              <p className="mt-2 text-sm text-muted">Contribution indexed for demo.</p>
-              <p className="mt-4 font-mono text-xs text-primary">Open detail</p>
-            </Link>
-          ))}
+        <div className="p-8">
+          <div className="rounded-xl border border-dashed border-border bg-background p-8 text-center">
+            <h2 className="text-2xl font-semibold text-foreground">
+              No pack participation yet
+            </h2>
+            <p className="mx-auto mt-3 max-w-2xl text-muted">
+              Packs will appear here after encrypted uploads are staged and
+              assigned to shared or dedicated blob storage. Start with a small
+              test upload so you can inspect the receipt and recovery path.
+            </p>
+            <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+              <Link
+                href="/app/upload"
+                className="flex min-h-11 items-center justify-center rounded bg-primary px-5 py-2 text-sm font-semibold text-[#133155] transition-opacity hover:opacity-90"
+              >
+                Upload a test file
+              </Link>
+              <Link
+                href="/app/recovery"
+                className="flex min-h-11 items-center justify-center rounded border border-border bg-surface px-5 py-2 text-sm font-semibold text-foreground transition-colors hover:border-primary"
+              >
+                Review recovery
+              </Link>
+            </div>
+          </div>
         </div>
       </div>
     </section>

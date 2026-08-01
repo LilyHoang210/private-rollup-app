@@ -1,9 +1,90 @@
-import { createHash, randomBytes } from "node:crypto";
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  timingSafeEqual,
+} from "node:crypto";
 
-const SESSION_COOKIE_NAME = "pr_session";
+export const SESSION_COOKIE_NAME = "pr_session";
+const DEFAULT_SESSION_SECRET = "private-rollup-dev-session-secret";
 
-export function createSessionToken() {
-  return randomBytes(32).toString("base64url");
+export interface AuthenticatedSession {
+  walletAddressHash: string;
+  chainId: string;
+  expiresAt: Date;
+}
+
+export function createSessionToken(input: {
+  walletAddressHash: string;
+  chainId: string;
+  maxAgeSeconds: number;
+  now?: Date;
+  secret?: string;
+}) {
+  const now = input.now ?? new Date();
+  const payload = {
+    version: 1,
+    walletAddressHash: input.walletAddressHash,
+    chainId: input.chainId,
+    issuedAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + input.maxAgeSeconds * 1000).toISOString(),
+    nonce: randomBytes(16).toString("base64url"),
+  };
+  const encodedPayload = Buffer.from(JSON.stringify(payload), "utf8").toString(
+    "base64url",
+  );
+  const signature = signSessionPayload(encodedPayload, input.secret);
+
+  return `${encodedPayload}.${signature}`;
+}
+
+export function parseSessionToken(
+  token: string,
+  options: { now?: Date; secret?: string } = {},
+): AuthenticatedSession | null {
+  const [encodedPayload, signature, extra] = token.split(".");
+  if (!encodedPayload || !signature || extra) {
+    return null;
+  }
+
+  if (!isEqualSignature(signature, signSessionPayload(encodedPayload, options.secret))) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(
+      Buffer.from(encodedPayload, "base64url").toString("utf8"),
+    ) as Partial<{
+      walletAddressHash: unknown;
+      chainId: unknown;
+      expiresAt: unknown;
+    }>;
+
+    if (
+      typeof payload.walletAddressHash !== "string" ||
+      typeof payload.chainId !== "string" ||
+      typeof payload.expiresAt !== "string"
+    ) {
+      return null;
+    }
+
+    const expiresAt = new Date(payload.expiresAt);
+    if (Number.isNaN(expiresAt.getTime())) {
+      return null;
+    }
+
+    if (expiresAt <= (options.now ?? new Date())) {
+      return null;
+    }
+
+    return {
+      walletAddressHash: payload.walletAddressHash,
+      chainId: payload.chainId,
+      expiresAt,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function hashSessionToken(token: string) {
@@ -28,4 +109,24 @@ export function createSessionCookie(input: {
   }
 
   return parts.join("; ");
+}
+
+function signSessionPayload(encodedPayload: string, secret?: string) {
+  return createHmac("sha256", sessionSecret(secret))
+    .update(encodedPayload, "utf8")
+    .digest("base64url");
+}
+
+function sessionSecret(secret?: string) {
+  return secret ?? process.env.AUTH_SESSION_SECRET ?? DEFAULT_SESSION_SECRET;
+}
+
+function isEqualSignature(left: string, right: string) {
+  const leftBytes = Buffer.from(left, "base64url");
+  const rightBytes = Buffer.from(right, "base64url");
+
+  return (
+    leftBytes.length === rightBytes.length &&
+    timingSafeEqual(leftBytes, rightBytes)
+  );
 }

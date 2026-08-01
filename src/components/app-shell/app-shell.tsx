@@ -103,7 +103,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-4">
               <div className="hidden items-center gap-2 rounded border border-border bg-surface-low px-3 py-1 md:flex">
                 <Wallet aria-hidden className="h-4 w-4 text-muted" />
-                <span className="font-mono text-xs text-foreground">0x12aF...9c4B</span>
+                <span className="font-mono text-xs text-foreground">Wallet connected</span>
               </div>
               <button
                 type="button"

@@ -40,6 +40,8 @@ describe("app shell", () => {
     expect(screen.getByRole("main")).toContainElement(
       screen.getByRole("heading", { name: "Dashboard" }),
     );
+    expect(screen.queryByText("0x12aF...9c4B")).not.toBeInTheDocument();
+    expect(screen.getByText("Wallet connected")).toBeVisible();
   });
 
   it("routes secondary navigation to dedicated pages", () => {

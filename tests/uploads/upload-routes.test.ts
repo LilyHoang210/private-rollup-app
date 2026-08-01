@@ -2,6 +2,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import { POST as createUpload } from "../../src/app/api/uploads/route";
 import { GET as getUpload } from "../../src/app/api/uploads/[uploadId]/route";
 import { POST as completeUpload } from "../../src/app/api/uploads/[uploadId]/complete/route";
+import {
+  createSessionCookie,
+  createSessionToken,
+} from "../../src/server/auth/session";
 import { resetUploadStoreForTests } from "../../src/server/uploads/service";
 
 describe("upload API routes", () => {
@@ -13,6 +17,7 @@ describe("upload API routes", () => {
     const createResponse = await createUpload(
       new Request("http://localhost/api/uploads", {
         method: "POST",
+        headers: authHeaders("a".repeat(64)),
         body: JSON.stringify({
           idempotencyKey: "route-idem-1",
           retentionDays: 90,
@@ -39,7 +44,9 @@ describe("upload API routes", () => {
     expect(created.items[0].packStrategy).toBe("shared_pack");
 
     const getResponse = await getUpload(
-      new Request(`http://localhost/api/uploads/${created.id}`),
+      new Request(`http://localhost/api/uploads/${created.id}`, {
+        headers: authHeaders("a".repeat(64)),
+      }),
       { params: Promise.resolve({ uploadId: created.id }) },
     );
     expect(getResponse.status).toBe(200);
@@ -51,6 +58,7 @@ describe("upload API routes", () => {
     const completeResponse = await completeUpload(
       new Request(`http://localhost/api/uploads/${created.id}/complete`, {
         method: "POST",
+        headers: authHeaders("a".repeat(64)),
         body: JSON.stringify({
           items: [
             {
@@ -75,6 +83,7 @@ describe("upload API routes", () => {
     const response = await createUpload(
       new Request("http://localhost/api/uploads", {
         method: "POST",
+        headers: authHeaders("a".repeat(64)),
         body: JSON.stringify({
           idempotencyKey: "route-idem-plaintext",
           retentionDays: 90,
@@ -100,4 +109,38 @@ describe("upload API routes", () => {
       error: "UPLOAD_INVALID",
     });
   });
+
+  it("requires a wallet session before creating upload batches", async () => {
+    const response = await createUpload(
+      new Request("http://localhost/api/uploads", {
+        method: "POST",
+        body: JSON.stringify({
+          idempotencyKey: "route-idem-unauthenticated",
+          retentionDays: 90,
+          items: [],
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "AUTH_REQUIRED",
+    });
+  });
 });
+
+function authHeaders(walletAddressHash: string) {
+  const token = createSessionToken({
+    walletAddressHash,
+    chainId: "aptos-testnet",
+    maxAgeSeconds: 60,
+    secret: "private-rollup-dev-session-secret",
+  });
+  const cookie = createSessionCookie({
+    token,
+    maxAgeSeconds: 60,
+    secure: false,
+  }).split(";")[0];
+
+  return { Cookie: cookie };
+}

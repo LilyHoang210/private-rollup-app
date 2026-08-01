@@ -37,7 +37,7 @@ export function WalletConnectPanel() {
         setStatus("connected");
         setPendingWalletName(null);
         setMessage(`Connected ${shortAddress(walletAddress)} on ${chainId}.`);
-        router.push("/app");
+        router.push("/app/setup");
       },
       onFailure: (error) => {
         authStartedRef.current = false;

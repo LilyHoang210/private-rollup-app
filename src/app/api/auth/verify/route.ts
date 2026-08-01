@@ -28,7 +28,12 @@ export async function POST(request: Request) {
 
   try {
     const verified = await authService.verifyChallenge(body.data);
-    const token = createSessionToken();
+    const sessionMaxAgeSeconds = 7 * 24 * 60 * 60;
+    const token = createSessionToken({
+      walletAddressHash: verified.walletAddressHash,
+      chainId: verified.chainId,
+      maxAgeSeconds: sessionMaxAgeSeconds,
+    });
     const response = NextResponse.json({
       chainId: verified.chainId,
       walletAddressHash: verified.walletAddressHash,
@@ -39,7 +44,7 @@ export async function POST(request: Request) {
       "Set-Cookie",
       createSessionCookie({
         token,
-        maxAgeSeconds: 7 * 24 * 60 * 60,
+        maxAgeSeconds: sessionMaxAgeSeconds,
         secure: process.env.NODE_ENV === "production",
       }),
     );
