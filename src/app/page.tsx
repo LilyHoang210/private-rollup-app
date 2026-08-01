@@ -72,7 +72,7 @@ export default function Home() {
             body="Use signed receipts and a local command-line tool to restore files even when the web application is unavailable."
             footer={
               <div className="rounded border border-border bg-background px-3 py-3 font-mono text-xs text-primary">
-                <span className="text-muted">$</span> private-rollup files pull
+                <span className="text-muted">$</span> node private-rollup-cli.mjs files pull
               </div>
             }
           />

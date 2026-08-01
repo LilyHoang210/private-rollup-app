@@ -57,7 +57,7 @@ describe("secure setup wizard", () => {
     );
 
     expect(writeText).toHaveBeenCalledWith(
-      "private-rollup recovery import ./recovery-kit.json",
+      "node ./private-rollup-cli.mjs recovery import ./recovery-kit.json",
     );
     expect(await screen.findByText("Copied")).toBeVisible();
   });

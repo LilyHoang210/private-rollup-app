@@ -6,14 +6,14 @@ const recoveryCommands = [
   {
     title: "Import recovery kit",
     label: "import recovery kit command",
-    command: "private-rollup recovery import ./recovery-kit.json",
+    command: "node ./private-rollup-cli.mjs recovery import ./recovery-kit.json",
     helper:
       "The key comes from recovery-kit.json. Do not paste private keys into the website or terminal.",
   },
   {
     title: "List files from receipts",
     label: "list receipts command",
-    command: "private-rollup files list --receipts ./receipts",
+    command: "node ./private-rollup-cli.mjs files list --receipts ./receipts",
     helper:
       "Use the folder where you store receipt.json files after uploads.",
   },
@@ -21,7 +21,7 @@ const recoveryCommands = [
     title: "Pull one restored file",
     label: "restore one file command",
     command:
-      "private-rollup files pull <file-id> --receipt ./receipt.json --output ./restored",
+      "node ./private-rollup-cli.mjs files pull <file-id> --receipt ./receipt.json --output ./restored",
     helper:
       "Replace <file-id> with the file ID from the list command or receipt.json.",
   },
@@ -89,8 +89,16 @@ export default function RecoveryPage() {
       <section className="rounded-xl border border-border bg-surface p-6">
         <h2 className="text-2xl font-semibold text-foreground">CLI commands</h2>
         <p className="mt-2 text-sm text-muted">
-          Copy one command at a time. Replace paths with files on your own machine.
+          Download the standalone CLI once, keep it with your recovery files,
+          then copy one command at a time.
         </p>
+        <a
+          href="/private-rollup-cli.mjs"
+          download
+          className="mt-4 inline-flex min-h-11 items-center justify-center rounded bg-primary px-5 py-2 text-sm font-semibold text-[#133155] transition-opacity hover:opacity-90"
+        >
+          Download recovery CLI
+        </a>
         <div className="mt-5 space-y-5">
           {recoveryCommands.map((item) => (
             <article key={item.title} className="space-y-2">

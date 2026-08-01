@@ -139,20 +139,20 @@ const cliCommands = [
   {
     label: "import recovery kit command",
     title: "1. Import the recovery kit",
-    command: "private-rollup recovery import ./recovery-kit.json",
+    command: "node ./private-rollup-cli.mjs recovery import ./recovery-kit.json",
     help: "./recovery-kit.json is the file you save from the Recovery page. The CLI reads it locally; you do not paste key text into the command.",
   },
   {
     label: "list receipts command",
     title: "2. List files from receipts",
-    command: "private-rollup files list --receipts ./receipts",
+    command: "node ./private-rollup-cli.mjs files list --receipts ./receipts",
     help: "./receipts is a local folder that contains one or more receipt.json files exported after upload.",
   },
   {
     label: "restore one file command",
     title: "3. Restore one file",
     command:
-      "private-rollup files pull <file-id> --receipt ./receipt.json --output ./restored",
+      "node ./private-rollup-cli.mjs files pull <file-id> --receipt ./receipt.json --output ./restored",
     help: "Replace <file-id> with the ID shown by the list command. ./receipt.json is the receipt for that file. ./restored is the output folder.",
   },
 ];

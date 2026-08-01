@@ -627,6 +627,7 @@ function downloadReceipt(batch: UploadApiBatchResponse) {
       localId: item.localId,
       label: item.label,
       category: item.category,
+      mimeType: item.mimeType,
       ciphertextSizeBytes: item.ciphertextSizeBytes,
       ciphertextSha256: item.ciphertextSha256,
       encryptedManifest: item.encryptedManifest,

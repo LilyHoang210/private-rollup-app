@@ -11,6 +11,7 @@ const eslintConfig = defineConfig([
     ".next/**",
     "out/**",
     "build/**",
+    "public/private-rollup-cli.mjs",
     "next-env.d.ts",
   ]),
 ]);

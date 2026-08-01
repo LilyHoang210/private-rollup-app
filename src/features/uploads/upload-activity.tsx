@@ -142,12 +142,20 @@ export function PacksUploadActivity() {
                   {batch.items[0]?.label ?? "Encrypted upload"}
                 </h2>
                 <p className="mt-1 text-sm text-muted">
-                  {formatFileCount(batch.items.length)} queued through the streamlined
-                  upload pipeline.
+                  {batch.storage
+                    ? `${formatFileCount(batch.items.length)} stored in a verified Shelby blob.`
+                    : `${formatFileCount(batch.items.length)} queued through the streamlined upload pipeline.`}
                 </p>
               </div>
               <PackFact label="Status" value={statusLabel(batch.status)} />
-              <PackFact label="Strategy" value={strategyLabel(batch.items[0]?.packStrategy)} />
+              <PackFact
+                label="Strategy"
+                value={
+                  batch.storage
+                    ? "Dedicated encrypted pack"
+                    : strategyLabel(batch.items[0]?.packStrategy)
+                }
+              />
               <PackFact label="Retention" value={`${batch.retentionDays} days`} />
               <PackFact label="Cost share" value={billingLabel(batch)} />
             </article>
