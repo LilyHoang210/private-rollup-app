@@ -13,6 +13,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { parseAptToOctas } from "@/domain/apt";
+import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import {
   formatApt,
   getAptAccount,
@@ -27,8 +28,10 @@ type AccountState =
   | { kind: "failed"; message: string };
 
 export function AptBalancePanel() {
+  const { connected, signAndSubmitTransaction } = useWallet();
   const [state, setState] = useState<AccountState>({ kind: "loading" });
-  const [busy, setBusy] = useState<"sync" | "withdraw" | null>(null);
+  const [busy, setBusy] = useState<"deposit" | "sync" | "withdraw" | null>(null);
+  const [depositAmount, setDepositAmount] = useState("");
   const [amount, setAmount] = useState("");
   const [notice, setNotice] = useState<string>();
   const [copied, setCopied] = useState(false);
@@ -70,6 +73,43 @@ export function AptBalancePanel() {
     } finally {
       setBusy(null);
     }
+  }
+
+  async function deposit() {
+    if (state.kind !== "ready" || !connected) return;
+    setBusy("deposit");
+    setNotice(undefined);
+    try {
+      const amountOctas = parseAptToOctas(depositAmount);
+      if (amountOctas <= 0) throw new Error("Enter an amount greater than zero");
+      const submitted = await signAndSubmitTransaction({
+        data: {
+          function: "0x1::aptos_account::transfer",
+          functionArguments: [state.account.wallet.address, amountOctas],
+        },
+      });
+      setNotice(`Deposit submitted: ${shortHash(submitted.hash)}. Syncing on-chain balance...`);
+      const account = await waitForDeposit(state.account.balanceOctas);
+      setState({ kind: "ready", account });
+      setDepositAmount("");
+      setNotice(`Deposit confirmed: ${shortHash(submitted.hash)}`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "APT deposit failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function waitForDeposit(previousBalanceOctas: number) {
+    let latest: AptAccountResponse | undefined;
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      if (attempt > 0) await new Promise((resolve) => window.setTimeout(resolve, 1200));
+      const result = await syncAptDeposits();
+      latest = result.account;
+      if (latest.balanceOctas > previousBalanceOctas) return latest;
+    }
+    if (!latest) throw new Error("Deposit was submitted but balance sync is unavailable");
+    return latest;
   }
 
   async function withdraw() {
@@ -168,6 +208,35 @@ export function AptBalancePanel() {
             <BalanceRow icon={<WalletCards className="h-4 w-4" />} label="Usable APT balance" value={formatApt(state.account.balanceOctas)} />
             <BalanceRow icon={<Coins className="h-4 w-4" />} label="Available to withdraw" value={formatApt(state.account.availableOctas)} />
             <BalanceRow icon={<LockKeyhole className="h-4 w-4" />} label="Reserved for open packs" value={formatApt(state.account.reservedOctas)} />
+          </div>
+
+          <div className="rounded-lg border border-primary/35 bg-background p-4">
+            <p className="text-sm font-semibold text-foreground">Deposit from your connected wallet</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted">
+              Enter an amount, approve one Aptos Testnet transfer in your wallet,
+              and the app will sync it to your usable APT balance automatically.
+            </p>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <label className="min-w-0 flex-1">
+                <span className="sr-only">APT amount to deposit</span>
+                <input
+                  value={depositAmount}
+                  onChange={(event) => setDepositAmount(event.currentTarget.value)}
+                  inputMode="decimal"
+                  placeholder="Amount in APT"
+                  className="min-h-11 w-full rounded border border-border bg-surface px-3 text-sm text-foreground outline-none focus:border-primary"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={deposit}
+                disabled={!connected || !depositAmount || busy !== null}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded bg-primary px-4 text-sm font-semibold text-[#133155] disabled:opacity-50"
+              >
+                <WalletCards className="h-4 w-4" />
+                {busy === "deposit" ? "Waiting for wallet..." : "Deposit APT"}
+              </button>
+            </div>
           </div>
 
           <div className="rounded-lg border border-border bg-background p-4">
