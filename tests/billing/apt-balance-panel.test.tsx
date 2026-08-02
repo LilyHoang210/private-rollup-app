@@ -63,7 +63,7 @@ describe("APT balance panel", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("builds an explicit Aptos transfer payload for wallet-standard deposits", () => {
+  it("builds an official Aptos APT transfer payload for wallet-standard deposits", () => {
     const transaction = buildDepositTransaction({
       recipientAddress: walletFixture().address,
       amountOctas: 1_000_000,
@@ -71,8 +71,7 @@ describe("APT balance panel", () => {
 
     expect(transaction).toMatchObject({
       data: {
-        function: "0x1::coin::transfer",
-        typeArguments: ["0x1::aptos_coin::AptosCoin"],
+        function: "0x1::aptos_account::transfer",
         functionArguments: [walletFixture().address, 1_000_000],
       },
     });
@@ -133,8 +132,7 @@ describe("APT balance panel", () => {
     expect(signAndSubmitTransactionMock).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          function: "0x1::coin::transfer",
-          typeArguments: ["0x1::aptos_coin::AptosCoin"],
+          function: "0x1::aptos_account::transfer",
           functionArguments: [walletFixture().address, 1_000_000],
         }),
       }),

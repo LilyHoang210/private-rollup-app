@@ -319,8 +319,7 @@ export function buildDepositTransaction(input: {
 }): InputTransactionData {
   return {
     data: {
-      function: "0x1::coin::transfer",
-      typeArguments: ["0x1::aptos_coin::AptosCoin"],
+      function: "0x1::aptos_account::transfer",
       functionArguments: [input.recipientAddress, input.amountOctas],
     },
   };
