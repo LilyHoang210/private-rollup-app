@@ -27,6 +27,8 @@ import {
 } from "@/client/api/apt-account";
 
 const WALLET_RESPONSE_TIMEOUT_MS = 45_000;
+const DEPOSIT_SYNC_ATTEMPTS = 6;
+const DEPOSIT_SYNC_INTERVAL_MS = process.env.NODE_ENV === "test" ? 10 : 1200;
 
 type AccountState =
   | { kind: "loading" }
@@ -110,14 +112,18 @@ export function AptBalancePanel() {
 
   async function waitForDeposit(previousBalanceOctas: number) {
     let latest: AptAccountResponse | undefined;
-    for (let attempt = 0; attempt < 6; attempt += 1) {
-      if (attempt > 0) await new Promise((resolve) => window.setTimeout(resolve, 1200));
+    for (let attempt = 0; attempt < DEPOSIT_SYNC_ATTEMPTS; attempt += 1) {
+      if (attempt > 0) {
+        await new Promise((resolve) => window.setTimeout(resolve, DEPOSIT_SYNC_INTERVAL_MS));
+      }
       const result = await syncAptDeposits();
       latest = result.account;
       if (latest.balanceOctas > previousBalanceOctas) return latest;
     }
     if (!latest) throw new Error("Deposit was submitted but balance sync is unavailable");
-    return latest;
+    throw new Error(
+      "The transaction was submitted, but the service wallet balance did not increase. Open the transaction in your wallet or explorer, then click 'I have deposited - sync' after it succeeds.",
+    );
   }
 
   async function withdraw() {

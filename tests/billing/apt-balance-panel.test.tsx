@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { act } from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -142,6 +142,43 @@ describe("APT balance panel", () => {
     expect(await screen.findByText("Deposit confirmed: 0x11111111...11111111")).toBeVisible();
     expect(screen.getAllByText("0.01 APT").length).toBeGreaterThan(0);
   });
+
+  it("does not confirm a submitted wallet transfer until synced balance increases", async () => {
+    walletHookMock.mockReturnValue({
+      connected: true,
+      signAndSubmitTransaction: signAndSubmitTransactionMock.mockResolvedValue({
+        hash: `0x${"2".repeat(64)}`,
+      }),
+    });
+    vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+      Promise.resolve(Response.json({
+        account: {
+          userId: "wallet:user",
+          balanceOctas: 0,
+          reservedOctas: 0,
+          availableOctas: 0,
+          wallet: walletFixture(),
+          ledger: [],
+        },
+      })),
+    );
+
+    render(<AptBalancePanel />);
+
+    expect((await screen.findAllByText("0 APT")).length).toBeGreaterThan(0);
+    await userEvent.type(screen.getByLabelText("APT amount to deposit"), "0.01");
+    await userEvent.click(screen.getByRole("button", { name: "Deposit APT" }));
+
+    await waitFor(
+      () => {
+        expect(
+          screen.getByText(/transaction was submitted, but the service wallet balance did not increase/i),
+        ).toBeVisible();
+      },
+      { timeout: 10_000 },
+    );
+    expect(screen.queryByText(/Deposit confirmed/)).not.toBeInTheDocument();
+  }, 12_000);
 });
 
 function walletFixture() {
