@@ -22,6 +22,7 @@
 - Empty pools show `Waiting for files` with `0 B / 8.0 MiB`.
 - Active pools show `Auto-upload in mm:ss unless the pool reaches 8.0 MiB first`.
 - Ready pools show why they are ready: byte threshold or wait time.
+- If wallet/local upload rows show waiting shared batches but the public aggregate pool has not caught up yet, the UI marks those bytes as `visible local` so the user can still track their pending upload without publishing private batch metadata.
 
 **Error handling:**
 - When available APT is below the estimated reserve, disable upload and explain the exact reserve, available amount, and missing amount.

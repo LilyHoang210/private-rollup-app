@@ -22,6 +22,10 @@ type PackPoolState =
   | { kind: "ready"; pools: PackPoolResponse[] }
   | { kind: "failed" };
 
+type DisplayPackPool = PackPoolResponse & {
+  source: "public" | "visible_local";
+};
+
 const EMPTY_BATCHES: UploadApiBatchResponse[] = [];
 const EMPTY_POOLS: PackPoolResponse[] = [];
 
@@ -78,6 +82,10 @@ export function PacksUploadActivity() {
   const poolState = usePackPools();
   const batches = state.kind === "ready" ? state.batches : EMPTY_BATCHES;
   const pools = poolState.kind === "ready" ? poolState.pools : EMPTY_POOLS;
+  const displayPools = useMemo(
+    () => mergeVisibleWaitingBatchesIntoPools(pools, batches),
+    [pools, batches],
+  );
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("expiration");
@@ -97,7 +105,7 @@ export function PacksUploadActivity() {
   if (state.kind === "failed") {
     return (
       <>
-        <PackPoolPanel pools={pools} state={poolState.kind} />
+        <PackPoolPanel pools={displayPools} state={poolState.kind} />
         <div className="p-8">
           <StatusPanel title="Connect wallet to load pack queue" body="Pack participation is wallet-scoped. Connect again if your browser session was refreshed." />
         </div>
@@ -108,7 +116,7 @@ export function PacksUploadActivity() {
   if (batches.length === 0) {
     return (
       <>
-        <PackPoolPanel pools={pools} state={poolState.kind} />
+        <PackPoolPanel pools={displayPools} state={poolState.kind} />
         <PackControls
           query={query}
           statusFilter={statusFilter}
@@ -126,7 +134,7 @@ export function PacksUploadActivity() {
 
   return (
     <>
-      <PackPoolPanel pools={pools} state={poolState.kind} />
+      <PackPoolPanel pools={displayPools} state={poolState.kind} />
       <PackControls
         query={query}
         statusFilter={statusFilter}
@@ -304,7 +312,7 @@ function PackPoolPanel({
   pools,
   state,
 }: {
-  pools: PackPoolResponse[];
+  pools: DisplayPackPool[];
   state: PackPoolState["kind"];
 }) {
   return (
@@ -357,7 +365,7 @@ function PackPoolPanel({
   );
 }
 
-function PoolCard({ pool }: { pool: PackPoolResponse }) {
+function PoolCard({ pool }: { pool: DisplayPackPool }) {
   const progressPercent =
     pool.queuedBytes > 0 ? Math.max(2, Math.round(pool.progressRatio * 100)) : 0;
 
@@ -368,9 +376,11 @@ function PoolCard({ pool }: { pool: PackPoolResponse }) {
           {pool.retentionDays}-day pool
         </h3>
         <span className="rounded-full border border-primary/40 px-3 py-1 font-mono text-xs text-primary">
-          {pool.waitingBatchCount > 0
-            ? formatBatchCount(pool.waitingBatchCount)
-            : "Waiting for files"}
+          {pool.source === "visible_local"
+            ? formatVisibleLocalBatchCount(pool.waitingBatchCount)
+            : pool.waitingBatchCount > 0
+              ? formatBatchCount(pool.waitingBatchCount)
+              : "Waiting for files"}
         </span>
       </div>
       <div className="mt-4 h-3 overflow-hidden rounded-full bg-surface-high">
@@ -404,6 +414,52 @@ function PoolCard({ pool }: { pool: PackPoolResponse }) {
         {packPoolTriggerCopy(pool)}
       </p>
     </article>
+  );
+}
+
+function mergeVisibleWaitingBatchesIntoPools(
+  publicPools: PackPoolResponse[],
+  batches: UploadApiBatchResponse[],
+): DisplayPackPool[] {
+  const visibleWaitingByRetention = new Map<
+    UploadApiBatchResponse["retentionDays"],
+    UploadApiBatchResponse[]
+  >();
+
+  for (const batch of batches) {
+    if (!isVisibleSharedWaitingBatch(batch)) continue;
+    const cohort = visibleWaitingByRetention.get(batch.retentionDays) ?? [];
+    cohort.push(batch);
+    visibleWaitingByRetention.set(batch.retentionDays, cohort);
+  }
+
+  return publicPools.map((pool) => {
+    const visibleBatches = visibleWaitingByRetention.get(pool.retentionDays) ?? [];
+    if (pool.queuedBytes > 0 || visibleBatches.length === 0) {
+      return { ...pool, source: "public" };
+    }
+
+    const queuedBytes = visibleBatches.reduce(
+      (total, batch) => total + batch.totalCiphertextSizeBytes,
+      0,
+    );
+
+    return {
+      ...pool,
+      queuedBytes,
+      waitingBatchCount: visibleBatches.length,
+      progressRatio: Math.min(1, queuedBytes / pool.targetBytes),
+      trigger: queuedBytes >= pool.targetBytes ? "byte_threshold" : pool.trigger,
+      nextTrigger: queuedBytes >= pool.targetBytes ? "byte_threshold" : pool.nextTrigger,
+      source: "visible_local",
+    };
+  });
+}
+
+function isVisibleSharedWaitingBatch(batch: UploadApiBatchResponse) {
+  return (
+    ["waiting_for_pack", "retrying"].includes(batch.status) &&
+    batch.items.every((item) => item.packStrategy !== "dedicated_blob")
   );
 }
 
@@ -660,6 +716,10 @@ function formatBatchCount(count: number) {
   return count === 1 ? "1 waiting batch" : `${count} waiting batches`;
 }
 
+function formatVisibleLocalBatchCount(count: number) {
+  return count === 1 ? "1 visible local batch" : `${count} visible local batches`;
+}
+
 function formatCountdown(seconds?: number) {
   if (seconds === undefined) return "05:00";
   const minutes = Math.floor(seconds / 60);
@@ -667,7 +727,10 @@ function formatCountdown(seconds?: number) {
   return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
 }
 
-function packPoolTriggerCopy(pool: PackPoolResponse) {
+function packPoolTriggerCopy(pool: DisplayPackPool) {
+  if (pool.source === "visible_local") {
+    return "Includes uploads visible in this browser session while the public pool sync catches up.";
+  }
   if (pool.waitingBatchCount === 0) {
     return "Waiting for files. The timer starts when the first encrypted upload joins this retention pool.";
   }

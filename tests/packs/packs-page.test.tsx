@@ -125,6 +125,33 @@ describe("packs page", () => {
     expect(screen.getByText("897 B / 8.0 MiB")).toBeVisible();
   });
 
+  it("shows locally visible waiting uploads when the public pool has not caught up", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+      Response.json(
+        String(input).includes("/api/packs/pool")
+          ? {
+              pools: [
+                poolFixture(30, 0, 0),
+                poolFixture(90, 0, 0),
+                poolFixture(365, 0, 0),
+              ],
+            }
+          : { batches: [batchFixture("local-visible", "Browser pending upload", 512, 365)] },
+      ),
+    );
+
+    render(<PacksPage />);
+
+    expect(await screen.findByText("365-day pool")).toBeVisible();
+    expect(screen.getByText("512 B / 8.0 MiB")).toBeVisible();
+    expect(screen.getByText("1 visible local batch")).toBeVisible();
+    expect(
+      screen.getByText(
+        "Includes uploads visible in this browser session while the public pool sync catches up.",
+      ),
+    ).toBeVisible();
+  });
+
   it("filters pack rows by search text", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       Response.json({ batches: [batchFixture("batch-a", "Alpha archive", 100)] }),
