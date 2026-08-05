@@ -33,6 +33,9 @@ const uploadItemSchema = z
 const createUploadSchema = z
   .object({
     idempotencyKey: z.string().min(1),
+    userAddress: z.string().regex(/^0x[a-fA-F0-9]+$/),
+    vaultRequestId: z.string().min(1),
+    reservationTransactionHash: z.string().regex(/^0x[a-fA-F0-9]+$/),
     retentionDays: z.union([z.literal(30), z.literal(90), z.literal(365)]),
     items: z.array(uploadItemSchema).min(1).max(1000),
   })
@@ -63,6 +66,7 @@ export async function POST(request: Request) {
     const batch = await createUploadBatchRuntime({
       userId,
       ...body.data,
+      userAddress: body.data.userAddress as `0x${string}`,
     });
 
     return NextResponse.json(batch, { status: 201 });
@@ -73,9 +77,10 @@ export async function POST(request: Request) {
 
 function uploadErrorResponse(error: unknown) {
   if (error instanceof DomainError) {
+    const status = error.code === "VAULT_RESERVATION_REQUIRED" ? 402 : 400;
     return NextResponse.json(
       { error: "UPLOAD_INVALID", code: error.code, message: error.message },
-      { status: 400 },
+      { status },
     );
   }
 

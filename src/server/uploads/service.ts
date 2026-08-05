@@ -11,10 +11,10 @@ import { DomainError } from "@/domain/errors";
 import {
   getUploadBilling,
   releaseUploadApt,
-  reserveUploadApt,
   type UploadBillingRecord,
 } from "@/server/billing/apt-account-service";
 import type { ShelbyWriteReceipt } from "@/server/storage/shelby-writer";
+import { assertVaultReservationReady } from "@/server/vault/payment-vault-service";
 
 export interface CreateUploadItemInput {
   localId: string;
@@ -30,8 +30,11 @@ export interface CreateUploadItemInput {
 
 export interface CreateUploadBatchInput {
   userId: string;
+  userAddress: `0x${string}`;
   idempotencyKey: string;
   retentionDays: RetentionCohort;
+  vaultRequestId: string;
+  reservationTransactionHash: string;
   items: CreateUploadItemInput[];
 }
 
@@ -120,12 +123,16 @@ export function createUploadBatch(input: CreateUploadBatchInput): UploadBatchRec
     (total, item) => total + item.ciphertextSizeBytes,
     0,
   );
-  const billing = reserveUploadApt({
+
+  assertVaultReservationReady({
     userId: input.userId,
-    uploadId: batchId,
-    ciphertextBytes: totalCiphertextSizeBytes,
-    retentionDays,
+    userAddress: input.userAddress,
+    vaultRequestId: input.vaultRequestId,
+    reservationTransactionHash: input.reservationTransactionHash,
+    expectedEncryptedBytes: totalCiphertextSizeBytes,
+    expectedRetentionDays: String(retentionDays) as "30" | "90" | "365",
   });
+
   const batch: UploadBatchRecord = {
     id: batchId,
     userId: input.userId,
@@ -133,7 +140,6 @@ export function createUploadBatch(input: CreateUploadBatchInput): UploadBatchRec
     retentionDays,
     status: "staging",
     totalCiphertextSizeBytes,
-    billing,
     items,
     createdAt: now,
     updatedAt: now,

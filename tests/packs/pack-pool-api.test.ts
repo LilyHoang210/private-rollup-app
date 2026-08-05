@@ -75,6 +75,9 @@ function queueSharedUpload(input: {
   });
   const created = createUploadBatch({
     userId: input.userId,
+    userAddress: "0xabc",
+    vaultRequestId: `vault-${input.idempotencyKey}`,
+    reservationTransactionHash: "0x1234",
     idempotencyKey: input.idempotencyKey,
     retentionDays: 90,
     items: [

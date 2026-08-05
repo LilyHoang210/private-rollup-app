@@ -6,30 +6,23 @@ import {
   createSessionCookie,
   createSessionToken,
 } from "../../src/server/auth/session";
-import {
-  recordWalletDeposit,
-  resetAptStoreForTests,
-} from "../../src/server/billing/apt-account-service";
 import { resetUploadStoreForTests } from "../../src/server/uploads/service";
 
 describe("upload API routes", () => {
   afterEach(() => {
     resetUploadStoreForTests();
-    resetAptStoreForTests();
   });
 
   it("creates, reads, and completes an encrypted upload batch", async () => {
-    recordWalletDeposit({
-      userId: `wallet:${"a".repeat(64)}`,
-      depositId: "route-deposit",
-      amountOctas: 100_000_000,
-    });
     const createResponse = await createUpload(
       new Request("http://localhost/api/uploads", {
         method: "POST",
         headers: authHeaders("a".repeat(64)),
         body: JSON.stringify({
           idempotencyKey: "route-idem-1",
+          userAddress: "0xabc",
+          vaultRequestId: "vault-route-1",
+          reservationTransactionHash: "0x1234",
           retentionDays: 90,
           items: [
             {
@@ -52,10 +45,7 @@ describe("upload API routes", () => {
     expect(createResponse.status).toBe(201);
     expect(created.status).toBe("staging");
     expect(created.items[0].packStrategy).toBe("shared_pack");
-    expect(created.billing).toMatchObject({
-      paymentStatus: "reserved",
-      reserveOctas: expect.any(Number),
-    });
+    expect(created).not.toHaveProperty("billing");
 
     const getResponse = await getUpload(
       new Request(`http://localhost/api/uploads/${created.id}`, {
@@ -85,14 +75,12 @@ describe("upload API routes", () => {
     );
 
     expect(completeResponse.status).toBe(200);
-    await expect(completeResponse.json()).resolves.toMatchObject({
+    const completed = await completeResponse.json();
+    expect(completed).toMatchObject({
       id: created.id,
       status: "waiting_for_pack",
-      billing: {
-        paymentStatus: "reserved",
-        reserveOctas: created.billing.reserveOctas,
-      },
     });
+    expect(completed).not.toHaveProperty("billing");
 
     const listResponse = await listUploads(
       new Request("http://localhost/api/uploads", {
@@ -100,19 +88,13 @@ describe("upload API routes", () => {
       }),
     );
     expect(listResponse.status).toBe(200);
-    await expect(listResponse.json()).resolves.toMatchObject({
-      batches: [
-        {
-          id: created.id,
-          status: "waiting_for_pack",
-          billing: {
-            paymentStatus: "reserved",
-            reserveOctas: created.billing.reserveOctas,
-          },
-          items: [{ label: "Passport scan" }],
-        },
-      ],
+    const listed = await listResponse.json();
+    expect(listed.batches[0]).toMatchObject({
+      id: created.id,
+      status: "waiting_for_pack",
+      items: [{ label: "Passport scan" }],
     });
+    expect(listed.batches[0]).not.toHaveProperty("billing");
   });
 
   it("returns 400 when upload metadata contains plaintext payload fields", async () => {
@@ -122,6 +104,9 @@ describe("upload API routes", () => {
         headers: authHeaders("a".repeat(64)),
         body: JSON.stringify({
           idempotencyKey: "route-idem-plaintext",
+          userAddress: "0xabc",
+          vaultRequestId: "vault-route-plaintext",
+          reservationTransactionHash: "0x1234",
           retentionDays: 90,
           items: [
             {

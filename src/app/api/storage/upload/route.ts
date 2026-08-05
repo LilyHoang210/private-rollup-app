@@ -34,6 +34,9 @@ const itemSchema = z.object({
 
 const requestSchema = z.object({
   idempotencyKey: z.string().min(1),
+  userAddress: z.string().regex(/^0x[a-fA-F0-9]+$/),
+  vaultRequestId: z.string().min(1),
+  reservationTransactionHash: z.string().regex(/^0x[a-fA-F0-9]+$/),
   retentionDays: z.union([z.literal(30), z.literal(90), z.literal(365)]),
   packBytesBase64: z.string().min(1).max(4_000_000),
   packSha256: z.string().regex(/^[a-f0-9]{64}$/i),
@@ -70,6 +73,9 @@ export async function POST(request: Request) {
 
   const batch = createUploadBatch({
     userId,
+    userAddress: parsed.data.userAddress as `0x${string}`,
+    vaultRequestId: parsed.data.vaultRequestId,
+    reservationTransactionHash: parsed.data.reservationTransactionHash,
     idempotencyKey: parsed.data.idempotencyKey,
     retentionDays: parsed.data.retentionDays,
     items: parsed.data.items,

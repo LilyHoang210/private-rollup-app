@@ -7,13 +7,11 @@ import {
   parseRetentionCohort,
   selectPackStrategy,
 } from "@/domain/files";
-import { estimateReserveOctas } from "@/domain/apt";
 import { DomainError } from "@/domain/errors";
 import type { UploadStatus } from "@/domain/uploads";
 import { getDatabase } from "@/server/db/client";
 import {
   aptAccounts,
-  aptLedger,
   packMembers,
   packs,
   uploadBatches,
@@ -21,6 +19,7 @@ import {
   uploadItems,
   users,
 } from "@/server/db/schema";
+import { assertVaultReservationReady } from "@/server/vault/payment-vault-service";
 import type {
   CompleteUploadBatchInput,
   CreateUploadBatchInput,
@@ -62,18 +61,15 @@ export async function createDurableUploadBatch(
       (total, item) => total + item.ciphertextSizeBytes,
       0,
     );
-    const reserveOctas = estimateReserveOctas({
-      ciphertextBytes: totalCiphertextBytes,
-      retentionDays,
+
+    assertVaultReservationReady({
+      userId: input.userId,
+      userAddress: input.userAddress,
+      vaultRequestId: input.vaultRequestId,
+      reservationTransactionHash: input.reservationTransactionHash,
+      expectedEncryptedBytes: totalCiphertextBytes,
+      expectedRetentionDays: String(retentionDays) as "30" | "90" | "365",
     });
-    const account = await ensureAptAccount(tx, user.id);
-    const available = account.balanceOctas - account.reservedOctas;
-    if (available < reserveOctas) {
-      throw new DomainError(
-        "Insufficient available APT for this upload",
-        "APT_INSUFFICIENT",
-      );
-    }
 
     const [createdBatch] = await tx
       .insert(uploadBatches)
@@ -109,26 +105,6 @@ export async function createDurableUploadBatch(
         wrappedDek: item.wrappedDek,
       })),
     );
-    await tx.insert(uploadBillings).values({
-      uploadBatchId: batchId,
-      reserveOctas,
-      paymentStatus: "reserved",
-    });
-    await tx
-      .update(aptAccounts)
-      .set({
-        reservedOctas: account.reservedOctas + reserveOctas,
-        updatedAt: new Date(),
-      })
-      .where(eq(aptAccounts.userId, user.id));
-    await tx.insert(aptLedger).values({
-      userId: user.id,
-      uploadBatchId: batchId,
-      type: "upload_reserve",
-      amountOctas: 0,
-      reservedDeltaOctas: reserveOctas,
-      idempotencyKey: `upload-reserve:${batchId}`,
-    });
   });
 
   const created = await getDurableUploadBatch(batchId, input.userId);
