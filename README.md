@@ -38,6 +38,19 @@ Shelby, authentication, and these custody secrets:
 - `APTOS_FEE_PAYER_PRIVATE_KEY`: an Aptos Testnet Ed25519 private key funded with
   enough Testnet APT to sponsor withdrawals.
 
+### Shelbynet direct payment requirement
+
+The Payment Vault design requires public Shelbynet Move entry points that allow
+a third-party contract to register and pay for Shelby storage. Configure:
+
+- `SHELBY_DIRECT_PAYMENT_MODULE_ADDRESS`
+- `SHELBY_DIRECT_REGISTER_FUNCTION`
+- `SHELBY_DIRECT_PAY_FUNCTION`
+- `SHELBY_STORAGE_COIN_TYPE`
+
+If these values are not available, the app must fail closed for real
+vault-backed uploads instead of falling back to a server-custodied wallet.
+
 ## Verification
 
 ```bash
