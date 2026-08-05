@@ -26,39 +26,12 @@ describe("packs page", () => {
   });
 
   it("shows queued upload batches waiting for shared pack assignment", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      Response.json({
-        batches: [
-          {
-            id: "c4b06f76-1111-4222-8333-123456789abc",
-            status: "waiting_for_pack",
-            retentionDays: 30,
-            totalCiphertextSizeBytes: 115,
-            billing: {
-              paymentStatus: "reserved",
-              reserveOctas: 25_000,
-            },
-            createdAt: "2026-08-01T07:15:00.000Z",
-            updatedAt: "2026-08-01T07:15:01.000Z",
-            items: [
-              {
-                id: "item-1",
-                batchId: "c4b06f76-1111-4222-8333-123456789abc",
-                localId: "local-0",
-                label: "QA smoke test",
-                category: "document",
-                plaintextSizeBytes: 99,
-                ciphertextSizeBytes: 115,
-                ciphertextSha256: "a".repeat(64),
-                encryptedManifest: "manifest",
-                wrappedDek: "dek",
-                status: "waiting_for_pack",
-                packStrategy: "shared_pack",
-              },
-            ],
-          },
-        ],
-      }),
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+      Response.json(
+        String(input).includes("/api/packs/pool")
+          ? { pools: [poolFixture(30, 115)] }
+          : { batches: [batchFixture("c4b06f76-1111-4222-8333-123456789abc", "QA smoke test", 115, 30, 25_000)] },
+      ),
     );
 
     render(<PacksPage />);
@@ -68,6 +41,46 @@ describe("packs page", () => {
     expect(screen.getByText("Shared pack")).toBeVisible();
     expect(screen.getByText("30 days")).toBeVisible();
     expect(screen.getByText("0.00025 APT")).toBeVisible();
+  });
+
+  it("shows waiting pack pool conditions and progress", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+      Response.json(
+        String(input).includes("/api/packs/pool")
+          ? {
+              pools: [
+                {
+                  retentionDays: 90,
+                  queuedBytes: 897,
+                  targetBytes: 8 * 1024 * 1024,
+                  maxBytes: 50 * 1024 * 1024,
+                  maxWaitSeconds: 300,
+                  waitingBatchCount: 2,
+                  progressRatio: 897 / (8 * 1024 * 1024),
+                  closesAt: "2026-08-01T07:20:00.000Z",
+                  secondsRemaining: 252,
+                  trigger: "waiting",
+                  nextTrigger: "wait_time",
+                  userBatchIds: ["batch-a", "batch-b"],
+                },
+              ],
+            }
+          : {
+              batches: [
+                batchFixture("batch-a", "Pool upload A", 400),
+                batchFixture("batch-b", "Pool upload B", 497),
+              ],
+            },
+      ),
+    );
+
+    render(<PacksPage />);
+
+    expect(await screen.findByText("Waiting Pack Pool")).toBeVisible();
+    expect(screen.getByText("90-day pool")).toBeVisible();
+    expect(screen.getByText("897 B / 8.0 MiB")).toBeVisible();
+    expect(screen.getByText("2 waiting batches")).toBeVisible();
+    expect(screen.getByText("Auto-upload in 04:12 unless the pool reaches 8.0 MiB first.")).toBeVisible();
   });
 
   it("filters pack rows by search text", async () => {
@@ -122,15 +135,21 @@ describe("packs page", () => {
   });
 });
 
-function batchFixture(id: string, label: string, totalCiphertextSizeBytes: number) {
+function batchFixture(
+  id: string,
+  label: string,
+  totalCiphertextSizeBytes: number,
+  retentionDays: 30 | 90 | 365 = 90,
+  reserveOctas = totalCiphertextSizeBytes * 10,
+) {
   return {
     id,
     status: "waiting_for_pack",
-    retentionDays: 90,
+    retentionDays,
     totalCiphertextSizeBytes,
     billing: {
       paymentStatus: "reserved",
-      reserveOctas: totalCiphertextSizeBytes * 10,
+      reserveOctas,
     },
     createdAt: id === "batch-large" ? "2026-08-01T07:16:00.000Z" : "2026-08-01T07:15:00.000Z",
     updatedAt: "2026-08-01T07:15:01.000Z",
@@ -150,5 +169,21 @@ function batchFixture(id: string, label: string, totalCiphertextSizeBytes: numbe
         packStrategy: "shared_pack",
       },
     ],
+  };
+}
+
+function poolFixture(retentionDays: 30 | 90 | 365, queuedBytes: number) {
+  return {
+    retentionDays,
+    queuedBytes,
+    targetBytes: 8 * 1024 * 1024,
+    maxBytes: 50 * 1024 * 1024,
+    maxWaitSeconds: 300,
+    waitingBatchCount: 1,
+    progressRatio: queuedBytes / (8 * 1024 * 1024),
+    secondsRemaining: 240,
+    trigger: "waiting",
+    nextTrigger: "wait_time",
+    userBatchIds: ["pool-batch"],
   };
 }

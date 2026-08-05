@@ -104,6 +104,33 @@ describe("upload panel", () => {
     );
   });
 
+  it("explains pack eligibility and blocks upload when available APT is below reserve", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input).includes("/api/storage/status")) {
+        return Response.json(storageReadyFixture());
+      }
+      if (String(input).includes("/api/apt-account")) {
+        return Response.json(aptAccountFixture({ availableOctas: 0 }));
+      }
+      return Response.json({ error: "NOT_FOUND" }, { status: 404 });
+    });
+
+    render(<UploadPanel />);
+    await userEvent.upload(
+      screen.getByLabelText("Select files"),
+      new File(["hello"], "hello.txt", { type: "text/plain" }),
+    );
+
+    expect(await screen.findByText("Pack Eligibility & Cost")).toBeVisible();
+    expect(screen.getByText("Shared Pack")).toBeVisible();
+    expect(screen.getByLabelText("Upload condition: 8.0 MiB pool or 5 minute wait")).toBeVisible();
+    expect(screen.getByLabelText("Estimated reserve: 0.000015 APT")).toBeVisible();
+    expect(screen.getByLabelText("Available APT: 0 APT")).toBeVisible();
+    expect(screen.getByText(/Missing APT: 0.000015 APT/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Deposit APT before upload" })).toBeDisabled();
+    expect(fetchMock.mock.calls.some((call) => call[0] === "/api/uploads")).toBe(false);
+  });
+
   it("shows the Shelby error and never fabricates a local completion", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
@@ -142,12 +169,13 @@ function storageReadyFixture() {
   };
 }
 
-function aptAccountFixture() {
+function aptAccountFixture(input?: { availableOctas?: number }) {
+  const availableOctas = input?.availableOctas ?? 100_000_000;
   return {
     account: {
-      balanceOctas: 100_000_000,
+      balanceOctas: availableOctas,
       reservedOctas: 0,
-      availableOctas: 100_000_000,
+      availableOctas,
       wallet: {
         address: `0x${"a".repeat(64)}`,
         network: "testnet",

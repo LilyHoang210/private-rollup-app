@@ -58,6 +58,23 @@ export interface UploadApiBatchResponse {
   updatedAt?: string;
 }
 
+export interface PackPoolResponse {
+  retentionDays: RetentionCohort;
+  queuedBytes: number;
+  targetBytes: number;
+  maxBytes: number;
+  maxWaitSeconds: number;
+  waitingBatchCount: number;
+  progressRatio: number;
+  oldestQueuedAt?: string;
+  closesAt?: string;
+  secondsRemaining?: number;
+  trigger: "byte_threshold" | "wait_time" | "waiting";
+  nextTrigger: "byte_threshold" | "wait_time";
+  oldestBatchId?: string;
+  userBatchIds: string[];
+}
+
 export interface UploadEncryptedPackRequest extends CreateUploadBatchRequest {
   packBytesBase64: string;
   packSha256: string;
@@ -149,6 +166,18 @@ export async function listUploadBatches(
   }
 
   return (await response.json()) as { batches: UploadApiBatchResponse[] };
+}
+
+export async function listPackPools(
+  fetcher: Fetcher = fetch,
+): Promise<{ pools: PackPoolResponse[] }> {
+  const response = await fetcher("/api/packs/pool");
+
+  if (!response.ok) {
+    throw new Error(`Pack pool request failed: ${response.status}`);
+  }
+
+  return (await response.json()) as { pools: PackPoolResponse[] };
 }
 
 async function postJson<TResponse>(

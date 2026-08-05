@@ -5,6 +5,7 @@ import { Download, FolderUp, PackageCheck, ShieldCheck, UploadCloud } from "luci
 import { formatApt, getAptAccount } from "@/client/api/apt-account";
 import { estimateReserveOctas } from "@/domain/apt";
 import type { FileCategory, RetentionCohort } from "@/domain/files";
+import { PACK_STRATEGY_THRESHOLD_BYTES } from "@/domain/files";
 import {
   completeUploadBatch,
   closePackNow,
@@ -94,6 +95,19 @@ export function UploadPanel() {
       retentionDays,
     });
   }, [files.length, retentionDays, selectedSize]);
+  const hasDedicatedFile = useMemo(
+    () => files.some((file) => file.size >= PACK_STRATEGY_THRESHOLD_BYTES),
+    [files],
+  );
+  const packMode = hasDedicatedFile ? "Dedicated Blob" : "Shared Pack";
+  const insufficientApt =
+    files.length > 0 &&
+    aptState.kind === "ready" &&
+    aptState.availableOctas < estimatedReserveOctas;
+  const missingAptOctas =
+    insufficientApt && aptState.kind === "ready"
+      ? estimatedReserveOctas - aptState.availableOctas
+      : 0;
 
   useEffect(() => {
     let active = true;
@@ -172,6 +186,17 @@ export function UploadPanel() {
       });
       return;
     }
+    if (insufficientApt) {
+      setState({
+        kind: "failed",
+        message: insufficientAptMessage({
+          reserveOctas: estimatedReserveOctas,
+          availableOctas: aptState.availableOctas,
+          missingOctas: missingAptOctas,
+        }),
+      });
+      return;
+    }
 
     setState({ kind: "encrypting" });
 
@@ -225,9 +250,21 @@ export function UploadPanel() {
       rememberLocalUploadBatch(completed);
       setState({ kind: "ready", batch: completed });
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Upload failed.";
       setState({
         kind: "failed",
-        message: error instanceof Error ? error.message : "Upload failed.",
+        message:
+          message.includes("Insufficient available APT")
+            ? insufficientAptMessage({
+                reserveOctas: estimatedReserveOctas,
+                availableOctas:
+                  aptState.kind === "ready" ? aptState.availableOctas : 0,
+                missingOctas:
+                  aptState.kind === "ready"
+                    ? Math.max(0, estimatedReserveOctas - aptState.availableOctas)
+                    : estimatedReserveOctas,
+              })
+            : message,
       });
     }
   }
@@ -279,6 +316,53 @@ export function UploadPanel() {
       </div>
 
       <StorageReadinessBanner status={storageStatus} />
+
+      {files.length > 0 ? (
+        <section className="mt-5 rounded-xl border border-primary/35 bg-background p-4">
+          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
+            <div>
+              <h3 className="text-lg font-semibold text-foreground">
+                Pack Eligibility & Cost
+              </h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted">
+                {packMode === "Shared Pack"
+                  ? "This selection joins a shared Shelby pack because every file is below 10 MiB."
+                  : "This selection uses a dedicated Shelby blob because at least one file is 10 MiB or larger."}
+              </p>
+            </div>
+            <span className="rounded-full border border-primary/40 px-3 py-1 font-mono text-xs text-primary">
+              {packMode}
+            </span>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <EligibilityRow
+              label="Upload condition"
+              value={
+                packMode === "Shared Pack"
+                  ? "8.0 MiB pool or 5 minute wait"
+                  : "Dedicated upload closes alone"
+              }
+            />
+            <EligibilityRow label="Retention cohort" value={`${retentionDays} days`} />
+            <EligibilityRow
+              label="Estimated reserve"
+              value={formatApt(estimatedReserveOctas)}
+            />
+            <EligibilityRow
+              label="Available APT"
+              value={
+                aptState.kind === "ready" ? formatApt(aptState.availableOctas) : "Loading..."
+              }
+            />
+          </div>
+          {insufficientApt ? (
+            <p className="mt-4 rounded-lg border border-error/50 bg-surface p-3 text-sm text-error">
+              Missing APT: {formatApt(missingAptOctas)}. Deposit APT into your
+              service wallet, then sync before uploading.
+            </p>
+          ) : null}
+        </section>
+      ) : null}
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         <label className="space-y-2">
@@ -391,10 +475,14 @@ export function UploadPanel() {
           data-action="upload.encrypt_queue"
           type="button"
           onClick={submitUpload}
-          disabled={state.kind === "encrypting"}
+          disabled={state.kind === "encrypting" || insufficientApt}
           className="min-h-11 rounded bg-primary px-5 py-2 text-sm font-semibold text-[#133155] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70"
         >
-          {state.kind === "encrypting" ? "Encrypting and staging ciphertext..." : "Encrypt and join a pack"}
+          {state.kind === "encrypting"
+            ? "Encrypting and staging ciphertext..."
+            : insufficientApt
+              ? "Deposit APT before upload"
+              : "Encrypt and join a pack"}
         </button>
       </div>
 
@@ -663,6 +751,27 @@ function StorageReadinessBanner({ status }: { status: StorageStatus }) {
       verified against on-chain metadata.
     </div>
   );
+}
+
+function EligibilityRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div
+      aria-label={`${label}: ${value}`}
+      className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+    >
+      <span className="font-semibold text-muted-strong">
+        {label}: <span className="font-mono text-foreground">{value}</span>
+      </span>
+    </div>
+  );
+}
+
+function insufficientAptMessage(input: {
+  reserveOctas: number;
+  availableOctas: number;
+  missingOctas: number;
+}) {
+  return `This upload needs ${formatApt(input.reserveOctas)} reserved, but your service wallet has ${formatApt(input.availableOctas)} available. Deposit at least ${formatApt(input.missingOctas)}, then sync your service wallet before uploading.`;
 }
 
 function formatBytes(bytes: number) {

@@ -1,8 +1,8 @@
 import type { RetentionCohort } from "@/domain/files";
 
-const TARGET_SHARED_PACK_BYTES = 8 * 1024 * 1024;
-const MAX_SHARED_PACK_BYTES = 50 * 1024 * 1024;
-const MAX_WAIT_MS = 5 * 60 * 1000;
+export const TARGET_SHARED_PACK_BYTES = 8 * 1024 * 1024;
+export const MAX_SHARED_PACK_BYTES = 50 * 1024 * 1024;
+export const MAX_WAIT_MS = 5 * 60 * 1000;
 
 export interface PackCandidate {
   id: string;

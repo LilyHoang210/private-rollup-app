@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Download } from "lucide-react";
 import { formatApt } from "@/client/api/apt-account";
 import type { UploadApiBatchResponse } from "@/client/api/uploads";
-import { listUploadBatches } from "@/client/api/uploads";
+import { listPackPools, listUploadBatches, type PackPoolResponse } from "@/client/api/uploads";
 import {
   mergeUploadBatches,
   readLocalUploadBatches,
@@ -17,7 +17,13 @@ type UploadActivityState =
   | { kind: "ready"; batches: UploadApiBatchResponse[] }
   | { kind: "failed" };
 
+type PackPoolState =
+  | { kind: "loading" }
+  | { kind: "ready"; pools: PackPoolResponse[] }
+  | { kind: "failed" };
+
 const EMPTY_BATCHES: UploadApiBatchResponse[] = [];
+const EMPTY_POOLS: PackPoolResponse[] = [];
 
 export function DashboardUploadActivity() {
   const state = useUploadActivity();
@@ -69,7 +75,9 @@ export function DashboardUploadActivity() {
 
 export function PacksUploadActivity() {
   const state = useUploadActivity();
+  const poolState = usePackPools();
   const batches = state.kind === "ready" ? state.batches : EMPTY_BATCHES;
+  const pools = poolState.kind === "ready" ? poolState.pools : EMPTY_POOLS;
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("expiration");
@@ -97,6 +105,7 @@ export function PacksUploadActivity() {
   if (batches.length === 0) {
     return (
       <>
+        <PackPoolPanel pools={pools} state={poolState.kind} />
         <PackControls
           query={query}
           statusFilter={statusFilter}
@@ -114,6 +123,7 @@ export function PacksUploadActivity() {
 
   return (
     <>
+      <PackPoolPanel pools={pools} state={poolState.kind} />
       <PackControls
         query={query}
         statusFilter={statusFilter}
@@ -176,6 +186,32 @@ export function PacksUploadActivity() {
       )}
     </>
   );
+}
+
+function usePackPools() {
+  const [state, setState] = useState<PackPoolState>({ kind: "loading" });
+
+  useEffect(() => {
+    let active = true;
+
+    void listPackPools()
+      .then(({ pools }) => {
+        if (active) {
+          setState({ kind: "ready", pools: Array.isArray(pools) ? pools : [] });
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setState({ kind: "failed" });
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return state;
 }
 
 function useUploadActivity() {
@@ -258,6 +294,90 @@ function PackControls({
         <option value="bytes">Largest contribution</option>
       </select>
     </div>
+  );
+}
+
+function PackPoolPanel({
+  pools,
+  state,
+}: {
+  pools: PackPoolResponse[];
+  state: PackPoolState["kind"];
+}) {
+  const visiblePools = pools.filter((pool) => pool.waitingBatchCount > 0);
+
+  return (
+    <section className="border-b border-border bg-background p-5">
+      <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
+        <div>
+          <h2 className="text-2xl font-semibold text-foreground">
+            Waiting Pack Pool
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted">
+            Shared packs upload to Shelby when a retention pool reaches{" "}
+            <span className="font-mono text-foreground">8.0 MiB</span> or when
+            the oldest waiting batch reaches{" "}
+            <span className="font-mono text-foreground">5 minutes</span>. Only
+            uploads with the same retention period are packed together.
+          </p>
+        </div>
+        <p className="rounded-full border border-border bg-surface px-3 py-1 font-mono text-xs text-muted-strong">
+          Shared max: 50.0 MiB
+        </p>
+      </div>
+
+      {state === "loading" ? (
+        <p className="mt-4 rounded-lg border border-border bg-surface p-4 text-sm text-muted">
+          Loading pack pool progress...
+        </p>
+      ) : null}
+
+      {state === "failed" ? (
+        <p className="mt-4 rounded-lg border border-border bg-surface p-4 text-sm text-muted">
+          Pack pool progress is unavailable. Your upload list can still be inspected.
+        </p>
+      ) : null}
+
+      {state === "ready" && visiblePools.length === 0 ? (
+        <p className="mt-4 rounded-lg border border-border bg-surface p-4 text-sm text-muted">
+          No shared pack pools are waiting for this wallet session.
+        </p>
+      ) : null}
+
+      {visiblePools.length > 0 ? (
+        <div className="mt-5 grid gap-4 lg:grid-cols-3">
+          {visiblePools.map((pool) => (
+            <article
+              key={pool.retentionDays}
+              className="rounded-xl border border-border bg-surface p-4"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-lg font-semibold text-foreground">
+                  {pool.retentionDays}-day pool
+                </h3>
+                <span className="rounded-full border border-primary/40 px-3 py-1 font-mono text-xs text-primary">
+                  {formatBatchCount(pool.waitingBatchCount)}
+                </span>
+              </div>
+              <div className="mt-4 h-3 overflow-hidden rounded-full bg-surface-high">
+                <div
+                  className="h-full rounded-full bg-primary"
+                  style={{
+                    width: `${Math.max(2, Math.round(pool.progressRatio * 100))}%`,
+                  }}
+                />
+              </div>
+              <p className="mt-3 font-mono text-sm text-foreground">
+                {formatBytes(pool.queuedBytes)} / {formatBytes(pool.targetBytes)}
+              </p>
+              <p className="mt-2 text-sm leading-relaxed text-muted">
+                {packPoolTriggerCopy(pool)}
+              </p>
+            </article>
+          ))}
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -508,4 +628,25 @@ function formatBytes(bytes: number) {
     return `${(bytes / 1024).toFixed(1)} KiB`;
   }
   return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
+function formatBatchCount(count: number) {
+  return count === 1 ? "1 waiting batch" : `${count} waiting batches`;
+}
+
+function formatCountdown(seconds?: number) {
+  if (seconds === undefined) return "05:00";
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
+}
+
+function packPoolTriggerCopy(pool: PackPoolResponse) {
+  if (pool.trigger === "byte_threshold") {
+    return `Ready to upload because the pool reached ${formatBytes(pool.targetBytes)}.`;
+  }
+  if (pool.trigger === "wait_time") {
+    return "Ready to upload because the oldest batch reached 5 minutes.";
+  }
+  return `Auto-upload in ${formatCountdown(pool.secondsRemaining)} unless the pool reaches ${formatBytes(pool.targetBytes)} first.`;
 }
