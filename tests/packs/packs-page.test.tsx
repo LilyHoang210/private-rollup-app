@@ -25,6 +25,21 @@ describe("packs page", () => {
     expect(screen.queryByText(/demo/i)).not.toBeInTheDocument();
   });
 
+  it("keeps pack pool rules visible when wallet-scoped pack data cannot load", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("Auth required"));
+
+    render(<PacksPage />);
+
+    expect(await screen.findByText("Waiting Pack Pool")).toBeVisible();
+    expect(screen.getByText(/Shared packs upload to Shelby/)).toBeVisible();
+    expect(
+      screen.getByText(
+        "Pack pool progress is unavailable. Your upload list can still be inspected.",
+      ),
+    ).toBeVisible();
+    expect(screen.getByText("Connect wallet to load pack queue")).toBeVisible();
+  });
+
   it("shows queued upload batches waiting for shared pack assignment", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
       Response.json(

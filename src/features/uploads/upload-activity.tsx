@@ -96,9 +96,12 @@ export function PacksUploadActivity() {
 
   if (state.kind === "failed") {
     return (
-      <div className="p-8">
-        <StatusPanel title="Connect wallet to load pack queue" body="Pack participation is wallet-scoped. Connect again if your browser session was refreshed." />
-      </div>
+      <>
+        <PackPoolPanel pools={pools} state={poolState.kind} />
+        <div className="p-8">
+          <StatusPanel title="Connect wallet to load pack queue" body="Pack participation is wallet-scoped. Connect again if your browser session was refreshed." />
+        </div>
+      </>
     );
   }
 
