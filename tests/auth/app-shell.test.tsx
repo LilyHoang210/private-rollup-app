@@ -9,6 +9,7 @@ const createWalletChallenge = vi.fn();
 const verifyWalletChallenge = vi.fn();
 const getWalletSession = vi.fn();
 const getAptBalance = vi.fn();
+const getAptAccount = vi.fn();
 const connect = vi.fn();
 const disconnect = vi.fn();
 const signMessage = vi.fn();
@@ -40,6 +41,15 @@ vi.mock("../../src/client/aptos/balance", () => ({
   getAptBalance: (...args: unknown[]) => getAptBalance(...args),
 }));
 
+vi.mock("../../src/client/api/apt-account", () => ({
+  formatApt: (octas: number) => {
+    const whole = Math.floor(octas / 100_000_000);
+    const fractional = String(octas % 100_000_000).padStart(8, "0").replace(/0+$/, "");
+    return `${whole}${fractional ? `.${fractional}` : ""} APT`;
+  },
+  getAptAccount: (...args: unknown[]) => getAptAccount(...args),
+}));
+
 vi.mock("@aptos-labs/wallet-adapter-react", () => ({
   useWallet: () => walletState.current,
 }));
@@ -56,6 +66,20 @@ describe("app shell", () => {
     walletState.current.wallet = { name: "Petra" };
     walletState.current.wallets = [];
     getAptBalance.mockResolvedValue("1.23456789 APT");
+    getAptAccount.mockResolvedValue({
+      account: {
+        userId: "wallet:user",
+        balanceOctas: 400_100,
+        reservedOctas: 15_000,
+        availableOctas: 385_100,
+        wallet: {
+          address: `0x${"9".repeat(64)}`,
+          network: "testnet",
+          onChainBalanceOctas: 400_100,
+        },
+        ledger: [],
+      },
+    });
     signMessage.mockResolvedValue({
       signature: "0xsig",
       fullMessage: "APTOS\nchallenge",
@@ -147,7 +171,14 @@ describe("app shell", () => {
     expect(screen.queryByRole("button", { name: "Connect wallet" })).not.toBeInTheDocument();
   });
 
-  it("opens connected wallet details with balance and logout", async () => {
+  it("opens connected wallet details with service wallet funds and logout", async () => {
+    getWalletSession.mockResolvedValue({
+      authenticated: true,
+      walletAddress: "0x1234567890abcdef",
+      walletAddressHash: "b".repeat(64),
+      chainId: "aptos-testnet",
+      expiresAt: "2026-08-08T00:00:00.000Z",
+    });
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(null, { status: 204 }),
     );
@@ -161,9 +192,19 @@ describe("app shell", () => {
     await userEvent.click(screen.getByRole("button", { name: /Connected wallet/ }));
 
     expect(await screen.findByRole("dialog", { name: "Wallet details" })).toBeVisible();
+    expect(screen.getByText("Connected wallet")).toBeVisible();
     expect(screen.getByText("Petra")).toBeVisible();
     expect(screen.getByText("0x1234567890abcdef")).toBeVisible();
-    expect(await screen.findByText("1.23456789 APT")).toBeVisible();
+    expect(screen.getByText("Webapp service wallet")).toBeVisible();
+    expect(await screen.findByText(`0x${"9".repeat(64)}`)).toBeVisible();
+    expect(screen.getByText("Available for uploads")).toBeVisible();
+    expect(screen.getByText("0.003851 APT")).toBeVisible();
+    expect(screen.getByText("Reserved for open packs")).toBeVisible();
+    expect(screen.getByText("0.00015 APT")).toBeVisible();
+    expect(screen.getByText("Total service wallet balance")).toBeVisible();
+    expect(screen.getByText("0.004001 APT")).toBeVisible();
+    expect(screen.queryByText("1.23456789 APT")).not.toBeInTheDocument();
+    expect(getAptBalance).not.toHaveBeenCalled();
 
     await userEvent.click(screen.getByRole("button", { name: "Log out" }));
 

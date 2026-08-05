@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
-import { LogOut, Wallet } from "lucide-react";
-import { getAptBalance } from "@/client/aptos/balance";
+import { Check, Copy, ExternalLink, LogOut, Wallet } from "lucide-react";
+import { formatApt, getAptAccount, type AptAccountResponse } from "@/client/api/apt-account";
 import { getWalletSession } from "@/client/api/auth";
 import {
   authenticateConnectedWallet,
@@ -22,10 +22,10 @@ type HydratedSession =
       chainId: string;
       expiresAt: string;
     };
-type BalanceState =
+type ServiceWalletState =
   | { kind: "idle" }
   | { kind: "loading" }
-  | { kind: "ready"; value: string }
+  | { kind: "ready"; account: AptAccountResponse }
   | { kind: "failed" };
 
 export function ConnectedWalletBadge() {
@@ -43,7 +43,7 @@ export function ConnectedWalletBadge() {
   const [message, setMessage] = useState("");
   const [isPanelOpen, setPanelOpen] = useState(false);
   const [pendingWalletName, setPendingWalletName] = useState<string | null>(null);
-  const [balanceState, setBalanceState] = useState<BalanceState>({ kind: "idle" });
+  const [serviceWalletState, setServiceWalletState] = useState<ServiceWalletState>({ kind: "idle" });
   const isMounted = useSyncExternalStore(
     subscribeToClientReady,
     getClientReadySnapshot,
@@ -138,27 +138,27 @@ export function ConnectedWalletBadge() {
   }, [account, address, connected, pendingWalletName, signMessage]);
 
   useEffect(() => {
-    if (!isPanelOpen || !displayAddress) {
+    if (!isPanelOpen || !displayAddress || !hydratedSession.authenticated) {
       return;
     }
 
     let active = true;
-    void getAptBalance(displayAddress)
-      .then((value) => {
+    void getAptAccount()
+      .then(({ account: serviceAccount }) => {
         if (active) {
-          setBalanceState({ kind: "ready", value });
+          setServiceWalletState({ kind: "ready", account: serviceAccount });
         }
       })
       .catch(() => {
         if (active) {
-          setBalanceState({ kind: "failed" });
+          setServiceWalletState({ kind: "failed" });
         }
       });
 
     return () => {
       active = false;
     };
-  }, [displayAddress, isPanelOpen]);
+  }, [displayAddress, hydratedSession.authenticated, isPanelOpen]);
 
   async function handleConnect(walletName: string) {
     setStatus("connecting");
@@ -245,7 +245,9 @@ export function ConnectedWalletBadge() {
   }
 
   function openPanel() {
-    setBalanceState(displayAddress ? { kind: "loading" } : { kind: "idle" });
+    setServiceWalletState(
+      displayAddress && hydratedSession.authenticated ? { kind: "loading" } : { kind: "idle" },
+    );
     setPanelOpen(true);
   }
 
@@ -269,7 +271,7 @@ export function ConnectedWalletBadge() {
       {isPanelOpen && hasActiveSession ? (
         <WalletDetailsDialog
           address={displayAddress}
-          balanceState={balanceState}
+          serviceWalletState={serviceWalletState}
           message={
             message ||
             (!connected && displayAddress
@@ -300,25 +302,33 @@ export function ConnectedWalletBadge() {
 
 function WalletDetailsDialog({
   address,
-  balanceState,
   canSignInWebSession,
   message,
   onClose,
   onLogout,
   onSignInWebSession,
   status,
+  serviceWalletState,
   walletName,
 }: {
   address?: string;
-  balanceState: BalanceState;
   canSignInWebSession: boolean;
   message: string;
   onClose: () => void;
   onLogout: () => void;
   onSignInWebSession: () => void;
   status: WalletActionStatus;
+  serviceWalletState: ServiceWalletState;
   walletName?: string;
 }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copyServiceWalletAddress(addressToCopy: string) {
+    await navigator.clipboard.writeText(addressToCopy);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-end bg-black/40 px-4 pt-14 backdrop-blur-sm">
       <div
@@ -333,7 +343,7 @@ function WalletDetailsDialog({
               Wallet details
             </h2>
             <p className="mt-1 text-sm text-muted">
-              Connected wallet information for this browser session.
+              Connected wallet signs in. The webapp service wallet pays upload fees.
             </p>
           </div>
           <button
@@ -345,12 +355,30 @@ function WalletDetailsDialog({
           </button>
         </div>
 
-        <dl className="mt-5 space-y-4">
-          <DetailRow label="Wallet" value={walletName ?? "Aptos wallet"} />
-          <DetailRow label="Address" value={address ?? "Wallet adapter is restoring address"} />
-          <DetailRow label="Network" value="Aptos Testnet" />
-          <DetailRow label="Balance" value={balanceLabel(balanceState)} />
-        </dl>
+        <section className="mt-5 rounded-xl border border-border bg-background p-4">
+          <h3 className="text-sm font-semibold text-foreground">Connected wallet</h3>
+          <p className="mt-1 text-xs leading-relaxed text-muted">
+            Used for login and for approving deposits or withdrawals.
+          </p>
+          <dl className="mt-4 space-y-4">
+            <DetailRow label="Wallet" value={walletName ?? "Aptos wallet"} />
+            <DetailRow label="Address" value={address ?? "Wallet adapter is restoring address"} />
+            <DetailRow label="Network" value="Aptos Testnet" />
+          </dl>
+        </section>
+
+        <section className="mt-4 rounded-xl border border-primary/35 bg-background p-4">
+          <h3 className="text-sm font-semibold text-foreground">Webapp service wallet</h3>
+          <p className="mt-1 text-xs leading-relaxed text-muted">
+            This wallet is created by the webapp for your account and pays upload,
+            pack, Shelby, and Aptos gas fees.
+          </p>
+          <ServiceWalletDetails
+            copied={copied}
+            onCopy={copyServiceWalletAddress}
+            state={serviceWalletState}
+          />
+        </section>
 
         {message ? <p className="mt-4 text-sm text-muted">{message}</p> : null}
 
@@ -376,6 +404,65 @@ function WalletDetailsDialog({
         </button>
       </div>
     </div>
+  );
+}
+
+function ServiceWalletDetails({
+  copied,
+  onCopy,
+  state,
+}: {
+  copied: boolean;
+  onCopy: (address: string) => void;
+  state: ServiceWalletState;
+}) {
+  if (state.kind === "loading") {
+    return <p className="mt-4 text-sm text-muted">Loading service wallet...</p>;
+  }
+  if (state.kind === "failed") {
+    return (
+      <p className="mt-4 rounded-lg border border-error/40 bg-surface p-3 text-sm text-error">
+        Service wallet balance is unavailable. Sign in again or refresh the page.
+      </p>
+    );
+  }
+  if (state.kind !== "ready") {
+    return (
+      <p className="mt-4 rounded-lg border border-border bg-surface p-3 text-sm text-muted">
+        Sign in to the web session to create and view your service wallet.
+      </p>
+    );
+  }
+
+  const wallet = state.account.wallet;
+  return (
+    <>
+      <dl className="mt-4 space-y-4">
+        <DetailRow label="Service wallet address" value={wallet.address} />
+        <DetailRow label="Available for uploads" value={formatApt(state.account.availableOctas)} />
+        <DetailRow label="Reserved for open packs" value={formatApt(state.account.reservedOctas)} />
+        <DetailRow label="Total service wallet balance" value={formatApt(state.account.balanceOctas)} />
+      </dl>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => onCopy(wallet.address)}
+          className="inline-flex min-h-10 items-center gap-2 rounded border border-border bg-surface px-3 text-xs font-semibold text-foreground hover:border-primary"
+        >
+          {copied ? <Check aria-hidden className="h-4 w-4" /> : <Copy aria-hidden className="h-4 w-4" />}
+          {copied ? "Copied" : "Copy address"}
+        </button>
+        <a
+          href={`https://explorer.aptoslabs.com/account/${wallet.address}?network=testnet`}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex min-h-10 items-center gap-2 rounded border border-border bg-surface px-3 text-xs font-semibold text-foreground hover:border-primary"
+        >
+          <ExternalLink aria-hidden className="h-4 w-4" />
+          View on explorer
+        </a>
+      </div>
+    </>
   );
 }
 
@@ -465,19 +552,6 @@ function DetailRow({ label, value }: { label: string; value: string }) {
       <dd className="mt-1 break-all font-mono text-sm text-foreground">{value}</dd>
     </div>
   );
-}
-
-function balanceLabel(balanceState: BalanceState) {
-  switch (balanceState.kind) {
-    case "loading":
-      return "Loading balance...";
-    case "ready":
-      return balanceState.value;
-    case "failed":
-      return "Balance unavailable";
-    case "idle":
-      return "Balance unavailable";
-  }
 }
 
 function subscribeToClientReady() {

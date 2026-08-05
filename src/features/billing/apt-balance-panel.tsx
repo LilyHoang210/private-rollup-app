@@ -13,11 +13,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { DIRECT_WITHDRAWAL_GAS_BUFFER_OCTAS, parseAptToOctas } from "@/domain/apt";
-import {
-  useWallet,
-  type AptosSignAndSubmitTransactionOutput,
-  type InputTransactionData,
-} from "@aptos-labs/wallet-adapter-react";
+import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import {
   formatApt,
   getAptAccount,
@@ -25,10 +21,13 @@ import {
   withdrawAvailableApt,
   type AptAccountResponse,
 } from "@/client/api/apt-account";
+import {
+  buildDepositTransaction,
+  depositToServiceWallet,
+  withWalletResponseTimeout,
+} from "@/client/aptos/deposit";
 
-const WALLET_RESPONSE_TIMEOUT_MS = 45_000;
-const DEPOSIT_SYNC_ATTEMPTS = 6;
-const DEPOSIT_SYNC_INTERVAL_MS = process.env.NODE_ENV === "test" ? 10 : 1200;
+export { buildDepositTransaction, withWalletResponseTimeout };
 
 type AccountState =
   | { kind: "loading" }
@@ -93,41 +92,28 @@ export function AptBalancePanel() {
     try {
       const amountOctas = parseAptToOctas(depositAmount);
       if (amountOctas <= 0) throw new Error("Enter an amount greater than zero");
-      const submitted = await withWalletResponseTimeout(
-        signAndSubmitTransaction(
-          buildDepositTransaction({
-            recipientAddress: state.account.wallet.address,
-            amountOctas,
-          }),
-        ),
-      );
-      setLastSubmittedHash(submitted.hash);
-      setNotice(`Deposit submitted: ${shortHash(submitted.hash)}. Syncing on-chain balance...`);
-      const account = await waitForDeposit(state.account.balanceOctas);
+      setNotice("Waiting for wallet approval...");
+      const { account, transactionHash } = await depositToServiceWallet({
+        amountOctas,
+        recipientAddress: state.account.wallet.address,
+        previousBalanceOctas: state.account.balanceOctas,
+        signAndSubmitTransaction,
+        syncDeposits: syncAptDeposits,
+        onSubmitted: (transactionHash) => {
+          setLastSubmittedHash(transactionHash);
+          setNotice(
+            `Deposit submitted: ${shortHash(transactionHash)}. Refreshing service wallet balance...`,
+          );
+        },
+      });
       setState({ kind: "ready", account });
       setDepositAmount("");
-      setNotice(`Deposit confirmed: ${shortHash(submitted.hash)}`);
+      setNotice(`Deposit confirmed: ${shortHash(transactionHash)}`);
     } catch (error) {
       setNotice(userFacingErrorMessage(error, "APT deposit failed"));
     } finally {
       setBusy(null);
     }
-  }
-
-  async function waitForDeposit(previousBalanceOctas: number) {
-    let latest: AptAccountResponse | undefined;
-    for (let attempt = 0; attempt < DEPOSIT_SYNC_ATTEMPTS; attempt += 1) {
-      if (attempt > 0) {
-        await new Promise((resolve) => window.setTimeout(resolve, DEPOSIT_SYNC_INTERVAL_MS));
-      }
-      const result = await syncAptDeposits();
-      latest = result.account;
-      if (latest.balanceOctas > previousBalanceOctas) return latest;
-    }
-    if (!latest) throw new Error("Deposit was submitted but balance sync is unavailable");
-    throw new Error(
-      "The transaction was submitted, but the service wallet balance did not increase. Open the transaction in your wallet or explorer, then click 'I have deposited - sync' after it succeeds.",
-    );
   }
 
   async function withdraw() {
@@ -216,7 +202,7 @@ export function AptBalancePanel() {
                     className="inline-flex min-h-10 items-center gap-2 rounded border border-border bg-surface px-3 text-xs font-semibold text-foreground hover:border-primary disabled:opacity-60"
                   >
                     <RefreshCw className={`h-4 w-4 ${busy === "sync" ? "animate-spin" : ""}`} />
-                    I have deposited - sync
+                    Refresh balance
                   </button>
                 </div>
               </div>
@@ -308,7 +294,8 @@ export function AptBalancePanel() {
               <p className="text-sm font-semibold text-foreground">Submitted transaction</p>
               <p className="mt-1 text-xs leading-relaxed text-muted">
                 The wallet returned this transaction hash. Use the explorer link to
-                verify whether Aptos accepted it, then sync the service wallet balance.
+                verify whether Aptos accepted it. The app refreshes the service
+                wallet balance automatically after deposits.
               </p>
               <code className="mt-3 block break-all rounded bg-surface-high p-3 text-xs text-primary">
                 {lastSubmittedHash}
@@ -347,41 +334,6 @@ function BalanceRow({ icon, label, value }: { icon: ReactNode; label: string; va
       <span className="font-mono text-sm text-foreground">{value}</span>
     </div>
   );
-}
-
-export function buildDepositTransaction(input: {
-  recipientAddress: string;
-  amountOctas: number;
-}): InputTransactionData {
-  return {
-    data: {
-      function: "0x1::aptos_account::transfer",
-      functionArguments: [input.recipientAddress, input.amountOctas],
-    },
-  };
-}
-
-export async function withWalletResponseTimeout(
-  promise: Promise<AptosSignAndSubmitTransactionOutput>,
-  timeoutMs = WALLET_RESPONSE_TIMEOUT_MS,
-) {
-  let timeoutId: number | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<never>((_, reject) => {
-        timeoutId = window.setTimeout(() => {
-          reject(
-            new Error(
-              "Wallet did not return a transaction hash. If you approved the transfer, wait a few seconds and click 'I have deposited - sync'. If the balance stays unchanged, reopen your wallet and try again.",
-            ),
-          );
-        }, timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timeoutId) window.clearTimeout(timeoutId);
-  }
 }
 
 export function userFacingErrorMessage(error: unknown, fallback = "Request failed") {

@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Download, FolderUp, PackageCheck, ShieldCheck, UploadCloud } from "lucide-react";
-import { formatApt, getAptAccount } from "@/client/api/apt-account";
+import { useWallet } from "@aptos-labs/wallet-adapter-react";
+import { formatApt, getAptAccount, syncAptDeposits } from "@/client/api/apt-account";
+import { depositToServiceWallet } from "@/client/aptos/deposit";
 import { estimateReserveOctas } from "@/domain/apt";
 import type { FileCategory, RetentionCohort } from "@/domain/files";
 import { PACK_STRATEGY_THRESHOLD_BYTES } from "@/domain/files";
@@ -60,10 +62,12 @@ type AptState =
       balanceOctas: number;
       reservedOctas: number;
       availableOctas: number;
+      walletAddress: string;
     }
   | { kind: "failed" };
 
 export function UploadPanel() {
+  const { connected, signAndSubmitTransaction } = useWallet();
   const [files, setFiles] = useState<File[]>([]);
   const [label, setLabel] = useState("");
   const [category, setCategory] = useState<FileCategory>("document");
@@ -78,6 +82,12 @@ export function UploadPanel() {
     kind: "loading",
   });
   const [aptState, setAptState] = useState<AptState>({ kind: "loading" });
+  const [depositState, setDepositState] = useState<
+    | { kind: "idle" }
+    | { kind: "depositing" }
+    | { kind: "failed"; message: string }
+    | { kind: "confirmed"; message: string }
+  >({ kind: "idle" });
   const [isClosingPack, setIsClosingPack] = useState(false);
   const [vaultMaterial] = useState(() => readLocalVaultPublicMaterial());
 
@@ -153,6 +163,7 @@ export function UploadPanel() {
             balanceOctas: account.balanceOctas,
             reservedOctas: account.reservedOctas,
             availableOctas: account.availableOctas,
+            walletAddress: account.wallet.address,
           });
         }
       })
@@ -269,6 +280,44 @@ export function UploadPanel() {
     }
   }
 
+  async function depositMissingApt() {
+    if (aptState.kind !== "ready" || missingAptOctas <= 0) return;
+    if (!connected) {
+      setDepositState({
+        kind: "failed",
+        message: "Connect your Aptos wallet before depositing to the service wallet.",
+      });
+      return;
+    }
+
+    setDepositState({ kind: "depositing" });
+    try {
+      const { account, transactionHash } = await depositToServiceWallet({
+        amountOctas: missingAptOctas,
+        recipientAddress: aptState.walletAddress,
+        previousBalanceOctas: aptState.balanceOctas,
+        signAndSubmitTransaction,
+        syncDeposits: syncAptDeposits,
+      });
+      setAptState({
+        kind: "ready",
+        balanceOctas: account.balanceOctas,
+        reservedOctas: account.reservedOctas,
+        availableOctas: account.availableOctas,
+        walletAddress: account.wallet.address,
+      });
+      setDepositState({
+        kind: "confirmed",
+        message: `Deposit confirmed: ${shortAddress(transactionHash)}. Service wallet balance updated.`,
+      });
+    } catch (error) {
+      setDepositState({
+        kind: "failed",
+        message: userFacingErrorMessage(error, "APT deposit failed"),
+      });
+    }
+  }
+
   async function sealPackNow(batch: UploadApiBatchResponse) {
     setIsClosingPack(true);
     try {
@@ -336,6 +385,10 @@ export function UploadPanel() {
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <EligibilityRow
+              label="Paying wallet"
+              value="Webapp service wallet"
+            />
+            <EligibilityRow
               label="Upload condition"
               value={
                 packMode === "Shared Pack"
@@ -349,16 +402,40 @@ export function UploadPanel() {
               value={formatApt(estimatedReserveOctas)}
             />
             <EligibilityRow
-              label="Available APT"
+              label="Service wallet available"
               value={
                 aptState.kind === "ready" ? formatApt(aptState.availableOctas) : "Loading..."
               }
             />
           </div>
           {insufficientApt ? (
-            <p className="mt-4 rounded-lg border border-error/50 bg-surface p-3 text-sm text-error">
-              Missing APT: {formatApt(missingAptOctas)}. Deposit APT into your
-              service wallet, then sync before uploading.
+            <div className="mt-4 rounded-lg border border-error/50 bg-surface p-3 text-sm">
+              <p className="text-error">
+                Service wallet needs {formatApt(estimatedReserveOctas)} for this
+                upload. Available:{" "}
+                {aptState.kind === "ready" ? formatApt(aptState.availableOctas) : "0 APT"}.
+                Missing: {formatApt(missingAptOctas)}.
+              </p>
+              <button
+                type="button"
+                onClick={depositMissingApt}
+                disabled={!connected || depositState.kind === "depositing"}
+                className="mt-3 inline-flex min-h-10 items-center justify-center rounded bg-primary px-4 py-2 text-sm font-semibold text-[#133155] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {depositState.kind === "depositing"
+                  ? "Waiting for wallet..."
+                  : `Deposit ${formatApt(missingAptOctas)}`}
+              </button>
+            </div>
+          ) : null}
+          {depositState.kind === "failed" ? (
+            <p className="mt-3 rounded-lg border border-error/40 bg-surface p-3 text-sm text-error">
+              {depositState.message}
+            </p>
+          ) : null}
+          {depositState.kind === "confirmed" ? (
+            <p className="mt-3 rounded-lg border border-primary/40 bg-surface p-3 text-sm text-muted-strong">
+              {depositState.message}
             </p>
           ) : null}
         </section>
@@ -465,7 +542,7 @@ export function UploadPanel() {
             </p>
             {aptState.kind === "ready" ? (
               <p className="mt-1 text-xs text-muted">
-                Available APT: {formatApt(aptState.availableOctas)}
+                Service wallet available: {formatApt(aptState.availableOctas)}
               </p>
             ) : null}
           </div>
@@ -480,9 +557,7 @@ export function UploadPanel() {
         >
           {state.kind === "encrypting"
             ? "Encrypting and staging ciphertext..."
-            : insufficientApt
-              ? "Deposit APT before upload"
-              : "Encrypt and join a pack"}
+            : "Encrypt and join a pack"}
         </button>
       </div>
 
@@ -771,7 +846,22 @@ function insufficientAptMessage(input: {
   availableOctas: number;
   missingOctas: number;
 }) {
-  return `This upload needs ${formatApt(input.reserveOctas)} reserved, but your service wallet has ${formatApt(input.availableOctas)} available. Deposit at least ${formatApt(input.missingOctas)}, then sync your service wallet before uploading.`;
+  return `Service wallet needs ${formatApt(input.reserveOctas)} for this upload. Available: ${formatApt(input.availableOctas)}. Missing: ${formatApt(input.missingOctas)}.`;
+}
+
+function userFacingErrorMessage(error: unknown, fallback = "Request failed") {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "string" && error.trim()) return error;
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string" &&
+    error.message.trim()
+  ) {
+    return error.message;
+  }
+  return fallback;
 }
 
 function formatBytes(bytes: number) {

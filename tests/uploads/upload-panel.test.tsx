@@ -7,18 +7,28 @@ import { createRecoveryKit } from "../../src/client/crypto/hpke";
 import { saveLocalVaultPublicMaterial } from "../../src/client/vault/local-vault";
 import { UploadPanel } from "../../src/features/upload/upload-panel";
 
-const { stageUploadMock } = vi.hoisted(() => ({
+const { signAndSubmitTransactionMock, stageUploadMock, walletHookMock } = vi.hoisted(() => ({
+  signAndSubmitTransactionMock: vi.fn(),
   stageUploadMock: vi.fn(async (pathname: string) => ({
     pathname,
     url: `https://store.private.blob.vercel-storage.com/${pathname}`,
   })),
+  walletHookMock: vi.fn(),
 }));
 
 vi.mock("@vercel/blob/client", () => ({ upload: stageUploadMock }));
+vi.mock("@aptos-labs/wallet-adapter-react", () => ({
+  useWallet: () => walletHookMock(),
+}));
 
 describe("upload panel", () => {
   beforeEach(async () => {
     localStorage.clear();
+    walletHookMock.mockReturnValue({
+      connected: true,
+      signAndSubmitTransaction: signAndSubmitTransactionMock,
+    });
+    signAndSubmitTransactionMock.mockResolvedValue({ hash: `0x${"1".repeat(64)}` });
     saveLocalVaultPublicMaterial(await createRecoveryKit());
   });
 
@@ -125,10 +135,50 @@ describe("upload panel", () => {
     expect(screen.getByText("Shared Pack")).toBeVisible();
     expect(screen.getByLabelText("Upload condition: 8.0 MiB pool or 5 minute wait")).toBeVisible();
     expect(screen.getByLabelText("Estimated reserve: 0.000015 APT")).toBeVisible();
-    expect(screen.getByLabelText("Available APT: 0 APT")).toBeVisible();
-    expect(screen.getByText(/Missing APT: 0.000015 APT/)).toBeVisible();
-    expect(screen.getByRole("button", { name: "Deposit APT before upload" })).toBeDisabled();
+    expect(screen.getByLabelText("Service wallet available: 0 APT")).toBeVisible();
+    expect(screen.getByText(/Service wallet needs 0.000015 APT for this upload/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Deposit 0.000015 APT" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Encrypt and join a pack" })).toBeDisabled();
     expect(fetchMock.mock.calls.some((call) => call[0] === "/api/uploads")).toBe(false);
+  });
+
+  it("deposits missing APT from the connected wallet and auto-syncs service wallet availability", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes("/api/storage/status")) {
+        return Response.json(storageReadyFixture());
+      }
+      if (url === "/api/apt-account") {
+        return Response.json(aptAccountFixture({ availableOctas: 0 }));
+      }
+      if (url === "/api/apt-account/sync" && init?.method === "POST") {
+        return Response.json(aptAccountFixture({ availableOctas: 1_500 }));
+      }
+      return Response.json({ error: "NOT_FOUND" }, { status: 404 });
+    });
+
+    render(<UploadPanel />);
+    await userEvent.upload(
+      screen.getByLabelText("Select files"),
+      new File(["hello"], "hello.txt", { type: "text/plain" }),
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: "Deposit 0.000015 APT" }));
+
+    expect(signAndSubmitTransactionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          function: "0x1::aptos_account::transfer",
+          functionArguments: [`0x${"a".repeat(64)}`, 1_500],
+        }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/apt-account/sync",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(await screen.findByLabelText("Service wallet available: 0.000015 APT")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Encrypt and join a pack" })).toBeEnabled();
   });
 
   it("shows the Shelby error and never fabricates a local completion", async () => {
