@@ -20,7 +20,7 @@ import {
   users,
   vaultUploadRequests,
 } from "@/server/db/schema";
-import { assertVaultReservationReady } from "@/server/vault/payment-vault-service";
+import { verifyVaultReservationTransaction } from "@/server/vault/payment-vault-service";
 import { quoteVaultUpload } from "@/server/vault/payment-vault-quote";
 import type {
   CompleteUploadBatchInput,
@@ -46,6 +46,20 @@ export async function createDurableUploadBatch(
     throw new DomainError("Upload metadata is incomplete", "UPLOAD_INVALID");
   }
   validateItems(input.items);
+  const totalCiphertextBytes = input.items.reduce(
+    (total, item) => total + item.ciphertextSizeBytes,
+    0,
+  );
+  await verifyVaultReservationTransaction({
+    userId: input.userId,
+    userAddress: input.userAddress,
+    vaultRequestId: input.vaultRequestId,
+    reservationTransactionHash: input.reservationTransactionHash,
+    reservationDeadlineSecs: input.reservationDeadlineSecs,
+    expectedEncryptedBytes: totalCiphertextBytes,
+    expectedRetentionDays: String(retentionDays) as "30" | "90" | "365",
+    contractAddress: readPaymentVaultContractAddress(),
+  });
 
   const batchId = randomUUID();
   await db.transaction(async (tx) => {
@@ -58,21 +72,6 @@ export async function createDurableUploadBatch(
       columns: { id: true },
     });
     if (existing) return;
-
-    const totalCiphertextBytes = input.items.reduce(
-      (total, item) => total + item.ciphertextSizeBytes,
-      0,
-    );
-
-    assertVaultReservationReady({
-      userId: input.userId,
-      userAddress: input.userAddress,
-      vaultRequestId: input.vaultRequestId,
-      reservationTransactionHash: input.reservationTransactionHash,
-      reservationDeadlineSecs: input.reservationDeadlineSecs,
-      expectedEncryptedBytes: totalCiphertextBytes,
-      expectedRetentionDays: String(retentionDays) as "30" | "90" | "365",
-    });
 
     const [createdBatch] = await tx
       .insert(uploadBatches)

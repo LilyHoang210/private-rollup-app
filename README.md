@@ -30,18 +30,16 @@ pnpm dev
 Copy `.env.example` to `.env.local` and configure Postgres, private Vercel Blob,
 Shelby, authentication, and Payment Vault settings.
 
-### Shelbynet direct payment requirement
+### Shelbynet upload and payment flow
 
-The Payment Vault design requires public Shelbynet Move entry points that allow
-a third-party contract to register and pay for Shelby storage. Configure:
-
-- `SHELBY_DIRECT_PAYMENT_MODULE_ADDRESS`
-- `SHELBY_DIRECT_REGISTER_FUNCTION`
-- `SHELBY_DIRECT_PAY_FUNCTION`
-- `SHELBY_STORAGE_COIN_TYPE`
-
-If these values are not available, the app must fail closed for real
-vault-backed uploads instead of falling back to a server-custodied wallet.
+The browser encrypts files locally, then asks the connected wallet to reserve
+APT in the Payment Vault contract. The backend verifies the reservation
+transaction on Shelbynet before accepting upload metadata. Ciphertext is staged
+in private Vercel Blob storage until the pack reaches its byte threshold or wait
+time. The service signer uploads the final encrypted pack through the Shelby
+Node SDK, verifies Shelby object metadata, and reports success to the Payment
+Vault. Payment Vault reimburses the service signer for Shelby cost, releases
+the platform fee only after success, and keeps the unused buffer refundable.
 
 ### Payment Vault contract
 
@@ -56,6 +54,7 @@ For deployment, publish the package from the platform owner account and set:
 - `PAYMENT_VAULT_CONTRACT_ADDRESS`: published `private_rollup` address.
 - `PAYMENT_VAULT_OWNER_ADDRESS`: platform owner address that can withdraw earned fees.
 - `PAYMENT_VAULT_OPERATOR_PRIVATE_KEY`: operator key used only to report upload success or failure.
+- `SHELBY_ACCOUNT_PRIVATE_KEY`: service signer that uploads encrypted packs to Shelby and receives Shelby-cost reimbursement.
 
 The contract holds upload funds, transfers the actual Shelby cost to the
 configured Shelby payment recipient on success, releases platform fees only

@@ -44,11 +44,12 @@ Each file DEK is 32 bytes. The wrapper stores the HPKE encapsulated key (`enc`) 
 
 The upload page now encrypts selected file bytes locally, wraps each DEK through HPKE, calculates ciphertext checksums, and sends only encrypted metadata/control-plane records to `/api/uploads`.
 
-The current staging reference is `local-browser://...` because object staging and pack writing are not implemented yet.
+The current staging reference is a private Vercel Blob object scoped to the
+durable upload batch. The worker later concatenates compatible staged packs,
+writes one encrypted pack through the Shelby Node SDK, verifies Shelby metadata,
+and stores receipt byte ranges for CLI recovery.
 
 ## Pending Before Production Claims
 
-- Browser-generated recovery kit flow.
 - Cross-runtime test vectors shared by browser, worker, and CLI.
 - Security review for nonce uniqueness, DEK lifecycle, HPKE info/AAD, and recovery derivation.
-- Durable object staging and pack writer integration.

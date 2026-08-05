@@ -34,20 +34,11 @@ test("explains Payment Vault, pack conditions, and local recovery before real up
   ).toBeVisible();
 });
 
-test("skips real vault-backed upload unless Shelbynet direct payment is configured", async ({ page }) => {
-  test.skip(
-    !process.env.PAYMENT_VAULT_CONTRACT_ADDRESS ||
-      !process.env.SHELBY_DIRECT_PAYMENT_MODULE_ADDRESS,
-    "Payment Vault contract and Shelby direct payment interface are required for a real upload.",
-  );
+test("legacy storage upload API is closed in favor of durable Payment Vault packs", async ({ request }) => {
+  const response = await request.post("/api/storage/upload", { data: {} });
 
-  await page.goto("/app/upload");
-  await page.setInputFiles('input[type="file"]', {
-    name: "vault-live-e2e.txt",
-    mimeType: "text/plain",
-    buffer: Buffer.from("live vault-backed upload source"),
+  expect(response.status()).toBe(410);
+  await expect(response.json()).resolves.toMatchObject({
+    error: "LEGACY_STORAGE_UPLOAD_DISABLED",
   });
-
-  await expect(page.getByText("Review upload cost")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Pay and upload" })).toBeEnabled();
 });

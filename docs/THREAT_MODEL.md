@@ -25,11 +25,13 @@ Status: draft for MVP implementation.
 - Chunk decryption rejects tampered ciphertext through AES-GCM authentication.
 - Upload API rejects plaintext payload fields and accepts encrypted metadata/control-plane state only.
 - File DEKs are wrapped with HPKE/X25519 before upload batch creation.
+- Payment Vault reservation hashes are verified on Shelbynet before durable upload metadata is accepted.
+- Encrypted packs use private Vercel Blob staging before the worker writes a verified Shelby blob.
+- Pack settlement calls the Payment Vault after Shelby verification; no local credit balance is fabricated.
 
 ## Open Risks
 
-- Demo wallet verification is not Aptos SIWA.
-- Recovery kit generation is not implemented.
-- Durable upload staging and pack writing are not implemented.
-- The current upload UI uses a local demo vault key for HPKE wrapping; persisted user vault key selection is not wired into upload yet.
+- Wallet authentication is an Aptos signed challenge, not a formal SIWA standard.
+- Recovery kit generation is browser-local; losing the kit can make encrypted files unrecoverable.
+- The service signer temporarily pays Shelby upload gas/storage before reimbursement from the Payment Vault.
 - No independent cryptography audit has been performed.

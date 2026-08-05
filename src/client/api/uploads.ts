@@ -83,11 +83,6 @@ export interface PackPoolResponse {
   nextTrigger: "byte_threshold" | "wait_time";
 }
 
-export interface UploadEncryptedPackRequest extends CreateUploadBatchRequest {
-  packBytesBase64: string;
-  packSha256: string;
-}
-
 export interface CreateUploadBatchRequest {
   idempotencyKey: string;
   userAddress: `0x${string}`;
@@ -120,13 +115,6 @@ export async function completeUploadBatch(
   fetcher: Fetcher = fetch,
 ): Promise<UploadApiBatchResponse> {
   return postJson(fetcher, `/api/uploads/${batchId}/complete`, input);
-}
-
-export async function uploadEncryptedPack(
-  input: UploadEncryptedPackRequest,
-  fetcher: Fetcher = fetch,
-): Promise<UploadApiBatchResponse> {
-  return postJson(fetcher, "/api/storage/upload", input);
 }
 
 export async function stageEncryptedPack(input: {
