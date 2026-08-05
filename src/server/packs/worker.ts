@@ -8,14 +8,12 @@ import {
 import type { RetentionCohort } from "@/domain/files";
 import { getDatabase } from "@/server/db/client";
 import {
-  aptAccounts,
-  aptLedger,
   packMembers,
   packs,
   uploadBatches,
-  uploadBillings,
   uploadItems,
   users,
+  vaultUploadRequests,
 } from "@/server/db/schema";
 import { writeEncryptedPack } from "@/server/storage/shelby-writer";
 import { selectPackCandidates } from "./pack-selection";
@@ -27,10 +25,58 @@ export interface ClosePackResult {
   batchIds: string[];
 }
 
+interface VaultSettlementClient {
+  markUploadSuccess(args: {
+    requestId: string;
+    actualShelbyCostOctas: number;
+  }): Promise<{ transactionHash: string }>;
+}
+
+export async function settlePackWithVault(input: {
+  vault: VaultSettlementClient;
+  packId: string;
+  totalCostOctas: number;
+  members: Array<{
+    vaultRequestId: string;
+    ciphertextBytes: number;
+  }>;
+}) {
+  const totalBytes = input.members.reduce(
+    (sum, member) => sum + member.ciphertextBytes,
+    0,
+  );
+  if (totalBytes <= 0) throw new Error("Pack has no billable bytes");
+
+  const settlements = [];
+  let allocated = 0;
+  for (const [index, member] of input.members.entries()) {
+    const actualShelbyCostOctas =
+      index === input.members.length - 1
+        ? input.totalCostOctas - allocated
+        : Math.floor(
+            (input.totalCostOctas * member.ciphertextBytes) / totalBytes,
+          );
+    allocated += actualShelbyCostOctas;
+    settlements.push(
+      await input.vault.markUploadSuccess({
+        requestId: member.vaultRequestId,
+        actualShelbyCostOctas,
+      }),
+    );
+  }
+
+  return {
+    packId: input.packId,
+    status: "settled" as const,
+    settlements,
+  };
+}
+
 export async function closeEligiblePack(input: {
   forceBatchId?: string;
   requestingUserId?: string;
   now?: Date;
+  vault?: VaultSettlementClient;
 } = {}): Promise<ClosePackResult> {
   const db = getDatabase();
   const waiting = await db.query.uploadBatches.findMany({
@@ -105,6 +151,16 @@ export async function closeEligiblePack(input: {
 
   const packId = randomUUID();
   try {
+    const vaultRequests = await db.query.vaultUploadRequests.findMany({
+      where: inArray(vaultUploadRequests.uploadBatchId, selectedIds),
+    });
+    if (vaultRequests.length !== selectedIds.length) {
+      throw new Error("Payment Vault reservation is missing for one or more pack members");
+    }
+    const vaultRequestByBatchId = new Map(
+      vaultRequests.map((request) => [request.uploadBatchId, request]),
+    );
+
     const memberBytes = await Promise.all(
       selectedBatches.map(async (batch) => ({
         batchId: batch.id,
@@ -133,6 +189,21 @@ export async function closeEligiblePack(input: {
         ciphertextBytes: member.byteLength,
       })),
     });
+    await settlePackWithVault({
+      vault: input.vault ?? unconfiguredVaultSettlementClient(),
+      packId,
+      totalCostOctas,
+      members: assembled.members.map((member) => {
+        const vaultRequest = vaultRequestByBatchId.get(member.batchId);
+        if (!vaultRequest) {
+          throw new Error("Payment Vault reservation is missing for a pack member");
+        }
+        return {
+          vaultRequestId: vaultRequest.requestId,
+          ciphertextBytes: member.byteLength,
+        };
+      }),
+    });
 
     await db.transaction(async (tx) => {
       await tx.insert(packs).values({
@@ -158,6 +229,10 @@ export async function closeEligiblePack(input: {
       for (const batch of selectedBatches) {
         const member = assembled.members.find((item) => item.batchId === batch.id)!;
         const allocation = allocations.find((item) => item.memberId === batch.id)!;
+        const vaultRequest = vaultRequestByBatchId.get(batch.id);
+        if (!vaultRequest) {
+          throw new Error("Payment Vault reservation is missing for a pack member");
+        }
         const items = await tx.query.uploadItems.findMany({
           where: eq(uploadItems.batchId, batch.id),
         });
@@ -171,12 +246,20 @@ export async function closeEligiblePack(input: {
             ciphertextHash: member.ciphertextSha256,
           })),
         );
-        await settleBatch(tx, {
-          batchId: batch.id,
-          userId: batch.userId,
-          packId,
-          costOctas: allocation.costOctas,
-        });
+        await tx
+          .update(vaultUploadRequests)
+          .set({
+            status: "settled",
+            actualShelbyCostOctas: allocation.costOctas,
+            refundableOctas: Math.max(
+              0,
+              vaultRequest.totalLockedOctas -
+                allocation.costOctas -
+                vaultRequest.platformFeeOctas,
+            ),
+            updatedAt: new Date(),
+          })
+          .where(eq(vaultUploadRequests.id, vaultRequest.id));
         await tx
           .update(uploadBatches)
           .set({ status: "available", packId, updatedAt: new Date() })
@@ -201,6 +284,14 @@ export async function closeEligiblePack(input: {
   }
 }
 
+function unconfiguredVaultSettlementClient(): VaultSettlementClient {
+  return {
+    async markUploadSuccess() {
+      throw new Error("Payment Vault settlement client is not configured");
+    },
+  };
+}
+
 async function readStagedPack(url: string, expectedSha256: string) {
   const result = await get(url, { access: "private", useCache: false });
   if (!result || result.statusCode !== 200 || !result.stream) {
@@ -212,59 +303,4 @@ async function readStagedPack(url: string, expectedSha256: string) {
     throw new Error("Private staging checksum does not match upload metadata");
   }
   return bytes;
-}
-
-async function settleBatch(
-  tx: Parameters<Parameters<ReturnType<typeof getDatabase>["transaction"]>[0]>[0],
-  input: {
-    batchId: string;
-    userId: string;
-    packId: string;
-    costOctas: number;
-  },
-) {
-  const [billing, account] = await Promise.all([
-    tx.query.uploadBillings.findFirst({
-      where: eq(uploadBillings.uploadBatchId, input.batchId),
-    }),
-    tx.query.aptAccounts.findFirst({
-      where: eq(aptAccounts.userId, input.userId),
-    }),
-  ]);
-  if (!billing || !account) throw new Error("Pack member billing state is missing");
-
-  const spendableIncludingOwnReserve =
-    account.balanceOctas -
-    Math.max(0, account.reservedOctas - billing.reserveOctas);
-  const settled = spendableIncludingOwnReserve >= input.costOctas;
-  await tx
-    .update(uploadBillings)
-    .set({
-      paymentStatus: settled ? "settled" : "payment_required",
-      settledOctas: settled ? input.costOctas : null,
-      updatedAt: new Date(),
-    })
-    .where(eq(uploadBillings.uploadBatchId, input.batchId));
-  if (!settled) return;
-
-  await tx
-    .update(aptAccounts)
-    .set({
-      balanceOctas: account.balanceOctas - input.costOctas,
-      reservedOctas: Math.max(
-        0,
-        account.reservedOctas - billing.reserveOctas,
-      ),
-      updatedAt: new Date(),
-    })
-    .where(eq(aptAccounts.userId, input.userId));
-  await tx.insert(aptLedger).values({
-    userId: input.userId,
-    uploadBatchId: input.batchId,
-    packId: input.packId,
-    type: "pack_settlement",
-    amountOctas: -input.costOctas,
-    reservedDeltaOctas: -billing.reserveOctas,
-    idempotencyKey: `pack-settlement:${input.packId}:${input.batchId}`,
-  });
 }

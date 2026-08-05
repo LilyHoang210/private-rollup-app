@@ -8,6 +8,14 @@ import {
 const RETENTION_COHORTS: RetentionCohort[] = [30, 90, 365];
 
 export type PackPoolTrigger = "byte_threshold" | "wait_time" | "waiting";
+export type PackPaymentStatus =
+  | "collecting"
+  | "closing"
+  | "uploading"
+  | "settling"
+  | "settled"
+  | "failed"
+  | "refundable";
 
 export interface PackPoolBatch {
   id: string;
@@ -24,7 +32,10 @@ export interface PackPoolSummary {
   targetBytes: number;
   maxBytes: number;
   maxWaitSeconds: number;
+  oldestBatchAgeSeconds?: number;
+  timeUntilForcedCloseSeconds?: number;
   waitingBatchCount: number;
+  paymentStatus: PackPaymentStatus;
   progressRatio: number;
   oldestQueuedAt?: string;
   closesAt?: string;
@@ -72,6 +83,14 @@ function summarizeCohort(input: {
   const secondsRemaining = closesAt
     ? Math.max(0, Math.ceil((closesAt.getTime() - input.now.getTime()) / 1000))
     : undefined;
+  const oldestBatchAgeSeconds = oldest?.createdAt
+    ? Math.max(
+        0,
+        Math.floor(
+          (input.now.getTime() - new Date(oldest.createdAt).getTime()) / 1000,
+        ),
+      )
+    : undefined;
   const progressRatio = Math.min(1, queuedBytes / TARGET_SHARED_PACK_BYTES);
 
   return {
@@ -80,7 +99,10 @@ function summarizeCohort(input: {
     targetBytes: TARGET_SHARED_PACK_BYTES,
     maxBytes: MAX_SHARED_PACK_BYTES,
     maxWaitSeconds: MAX_WAIT_MS / 1000,
+    oldestBatchAgeSeconds,
+    timeUntilForcedCloseSeconds: secondsRemaining,
     waitingBatchCount: sorted.length,
+    paymentStatus: "collecting",
     progressRatio,
     oldestQueuedAt: oldest?.createdAt,
     closesAt: closesAt?.toISOString(),
