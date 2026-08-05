@@ -82,6 +82,24 @@ describe("dashboard content", () => {
     expect(screen.getByText("Reserved: 0.00025 APT")).toBeVisible();
   });
 
+  it("keeps byte metric values on one line", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input).includes("/api/apt-account")) {
+        return Response.json(aptAccountFixture());
+      }
+      return Response.json({
+        batches: [
+          uploadBatchFixture("batch-a", 400),
+          uploadBatchFixture("batch-b", 497),
+        ],
+      });
+    });
+
+    render(<DashboardPage />);
+
+    expect(await screen.findByText("897 B")).toHaveClass("whitespace-nowrap");
+  });
+
   it("shows locally cached uploads when the serverless API returns a stale empty list", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       if (String(input).includes("/api/apt-account")) {
@@ -151,5 +169,36 @@ function aptAccountFixture(input?: { reservedOctas?: number }) {
         },
       ],
     },
+  };
+}
+
+function uploadBatchFixture(id: string, totalCiphertextSizeBytes: number) {
+  return {
+    id,
+    status: "waiting_for_pack",
+    retentionDays: 90,
+    totalCiphertextSizeBytes,
+    billing: {
+      paymentStatus: "reserved",
+      reserveOctas: 25_000,
+    },
+    createdAt: "2026-08-01T07:15:00.000Z",
+    updatedAt: "2026-08-01T07:15:01.000Z",
+    items: [
+      {
+        id: `${id}-item`,
+        batchId: id,
+        localId: `${id}-local`,
+        label: `${id} upload`,
+        category: "document",
+        plaintextSizeBytes: totalCiphertextSizeBytes - 16,
+        ciphertextSizeBytes: totalCiphertextSizeBytes,
+        ciphertextSha256: "b".repeat(64),
+        encryptedManifest: "manifest",
+        wrappedDek: "dek",
+        status: "waiting_for_pack",
+        packStrategy: "shared_pack",
+      },
+    ],
   };
 }

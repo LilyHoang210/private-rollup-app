@@ -431,9 +431,11 @@ function StatusPanel({ body, title }: { body: string; title: string }) {
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex h-32 flex-col justify-between rounded-xl border border-border bg-surface p-6 transition-colors hover:border-primary">
-      <p className="text-sm font-semibold uppercase text-muted-strong">{label}</p>
-      <p className="text-4xl font-bold text-foreground">{value}</p>
+    <div className="flex h-32 min-w-0 flex-col justify-between rounded-xl border border-border bg-surface p-5 transition-colors hover:border-primary sm:p-6">
+      <p className="text-sm font-semibold uppercase leading-snug text-muted-strong">{label}</p>
+      <p className="whitespace-nowrap text-3xl font-bold leading-none text-foreground sm:text-4xl">
+        {value}
+      </p>
     </div>
   );
 }
