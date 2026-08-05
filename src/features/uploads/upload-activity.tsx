@@ -26,7 +26,7 @@ export function DashboardUploadActivity() {
 
   return (
     <>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3">
         <Metric label="Queued Batches" value={String(metrics.queuedBatches)} />
         <Metric label="Encrypted Files" value={String(metrics.fileCount)} />
         <Metric label="Queued Bytes" value={formatBytes(metrics.bytes)} />
@@ -431,9 +431,16 @@ function StatusPanel({ body, title }: { body: string; title: string }) {
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex h-32 min-w-0 flex-col justify-between rounded-xl border border-border bg-surface p-5 transition-colors hover:border-primary sm:p-6">
-      <p className="text-sm font-semibold uppercase leading-snug text-muted-strong">{label}</p>
-      <p className="whitespace-nowrap text-3xl font-bold leading-none text-foreground sm:text-4xl">
+    <div
+      role="group"
+      aria-label={`${label}: ${value}`}
+      className="flex min-h-16 min-w-0 flex-row items-center justify-between gap-4 rounded-xl border border-border bg-surface px-5 py-4 transition-colors hover:border-primary sm:px-6"
+    >
+      <p className="min-w-0 text-sm font-semibold leading-snug text-foreground sm:text-base">
+        <span>{label}</span>
+        <span className="text-muted-strong"> :</span>
+      </p>
+      <p className="shrink-0 whitespace-nowrap text-2xl font-bold leading-none text-foreground sm:text-3xl">
         {value}
       </p>
     </div>

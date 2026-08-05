@@ -82,7 +82,7 @@ describe("dashboard content", () => {
     expect(screen.getByText("Reserved: 0.00025 APT")).toBeVisible();
   });
 
-  it("keeps byte metric values on one line", async () => {
+  it("renders dashboard metrics as comfortable horizontal rows", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       if (String(input).includes("/api/apt-account")) {
         return Response.json(aptAccountFixture());
@@ -97,7 +97,12 @@ describe("dashboard content", () => {
 
     render(<DashboardPage />);
 
-    expect(await screen.findByText("897 B")).toHaveClass("whitespace-nowrap");
+    const queuedBatches = await screen.findByLabelText("Queued Batches: 2");
+    const queuedBytes = screen.getByLabelText("Queued Bytes: 897 B");
+
+    expect(queuedBatches).toHaveClass("flex-row", "items-center", "justify-between");
+    expect(queuedBytes).toHaveClass("flex-row", "items-center", "justify-between");
+    expect(screen.getByText("897 B")).toHaveClass("whitespace-nowrap");
   });
 
   it("shows locally cached uploads when the serverless API returns a stale empty list", async () => {
