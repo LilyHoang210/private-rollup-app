@@ -26,7 +26,7 @@ export function DashboardUploadActivity() {
 
   return (
     <>
-      <div className="grid grid-cols-1 gap-3">
+      <div className="grid grid-cols-1 gap-3 self-start lg:col-span-3">
         <Metric label="Queued Batches" value={String(metrics.queuedBatches)} />
         <Metric label="Encrypted Files" value={String(metrics.fileCount)} />
         <Metric label="Queued Bytes" value={formatBytes(metrics.bytes)} />

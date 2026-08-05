@@ -100,6 +100,7 @@ describe("dashboard content", () => {
     const queuedBatches = await screen.findByLabelText("Queued Batches: 2");
     const queuedBytes = screen.getByLabelText("Queued Bytes: 897 B");
 
+    expect(queuedBatches.parentElement).toHaveClass("lg:col-span-3", "self-start");
     expect(queuedBatches).toHaveClass("flex-row", "items-center", "justify-between");
     expect(queuedBytes).toHaveClass("flex-row", "items-center", "justify-between");
     expect(screen.getByText("897 B")).toHaveClass("whitespace-nowrap");
