@@ -395,6 +395,22 @@ function PoolCard({ pool }: { pool: DisplayPackPool }) {
       <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
         <div className="rounded-lg border border-border bg-background p-3">
           <dt className="text-xs font-semibold uppercase tracking-wider text-muted-strong">
+            Uploads when
+          </dt>
+          <dd className="mt-1 text-foreground">
+            {formatBytes(pool.targetBytes)} or {formatCountdown(pool.maxWaitSeconds)}
+          </dd>
+        </div>
+        <div className="rounded-lg border border-border bg-background p-3">
+          <dt className="text-xs font-semibold uppercase tracking-wider text-muted-strong">
+            Settlement status
+          </dt>
+          <dd className="mt-1 font-semibold text-foreground">
+            {paymentStatusLabel(pool.paymentStatus)}
+          </dd>
+        </div>
+        <div className="rounded-lg border border-border bg-background p-3">
+          <dt className="text-xs font-semibold uppercase tracking-wider text-muted-strong">
             Upload threshold
           </dt>
           <dd className="mt-1 font-mono text-foreground">
@@ -407,6 +423,14 @@ function PoolCard({ pool }: { pool: DisplayPackPool }) {
           </dt>
           <dd className="mt-1 font-mono text-foreground">
             {formatCountdown(pool.maxWaitSeconds)}
+          </dd>
+        </div>
+        <div className="rounded-lg border border-border bg-background p-3">
+          <dt className="text-xs font-semibold uppercase tracking-wider text-muted-strong">
+            Your reserved share
+          </dt>
+          <dd className="mt-1 font-mono text-foreground">
+            {pool.source === "visible_local" ? formatBytes(pool.queuedBytes) : "Wallet scoped"}
           </dd>
         </div>
       </dl>
@@ -741,4 +765,12 @@ function packPoolTriggerCopy(pool: DisplayPackPool) {
     return "Ready to upload because the oldest batch reached 5 minutes.";
   }
   return `Auto-upload in ${formatCountdown(pool.secondsRemaining)} unless the pool reaches ${formatBytes(pool.targetBytes)} first.`;
+}
+
+function paymentStatusLabel(status?: string) {
+  if (!status) return "Collecting";
+  return status
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }

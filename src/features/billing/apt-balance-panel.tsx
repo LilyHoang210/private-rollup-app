@@ -1,164 +1,94 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import {
-  ArrowUpFromLine,
-  Check,
-  Coins,
-  Copy,
-  ExternalLink,
-  LockKeyhole,
-  RefreshCw,
-  ShieldCheck,
-  WalletCards,
-} from "lucide-react";
-import { DIRECT_WITHDRAWAL_GAS_BUFFER_OCTAS, parseAptToOctas } from "@/domain/apt";
+import { ArrowUpFromLine, Copy, ExternalLink, LockKeyhole, RefreshCw, ShieldCheck, WalletCards } from "lucide-react";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
+import { formatApt } from "@/domain/apt";
+import { parseAptToOctas } from "@/domain/apt";
 import {
-  formatApt,
-  getAptAccount,
-  syncAptDeposits,
-  withdrawAvailableApt,
-  type AptAccountResponse,
-} from "@/client/api/apt-account";
-import {
-  buildDepositTransaction,
-  depositToServiceWallet,
-  withWalletResponseTimeout,
-} from "@/client/aptos/deposit";
+  buildWithdrawRefundPayload,
+  getPaymentVaultStatus,
+  type PaymentVaultStatusResponse,
+} from "@/client/api/payment-vault";
 
-export { buildDepositTransaction, withWalletResponseTimeout };
-
-type AccountState =
+type VaultState =
   | { kind: "loading" }
-  | { kind: "ready"; account: AptAccountResponse }
+  | { kind: "ready"; status: PaymentVaultStatusResponse }
   | { kind: "failed"; message: string };
 
 export function AptBalancePanel() {
   const { connected, signAndSubmitTransaction } = useWallet();
-  const [state, setState] = useState<AccountState>({ kind: "loading" });
-  const [busy, setBusy] = useState<"deposit" | "sync" | "withdraw" | null>(null);
-  const [depositAmount, setDepositAmount] = useState("");
+  const [state, setState] = useState<VaultState>({ kind: "loading" });
   const [amount, setAmount] = useState("");
+  const [busy, setBusy] = useState<"refresh" | "withdraw" | null>(null);
   const [notice, setNotice] = useState<string>();
-  const [lastSubmittedHash, setLastSubmittedHash] = useState<string>();
-  const [copied, setCopied] = useState(false);
+
+  const loadStatus = () => {
+    setBusy((current) => current ?? "refresh");
+    void getPaymentVaultStatus()
+      .then((status) => {
+        setState({ kind: "ready", status });
+      })
+      .catch((error: unknown) => {
+        setState({
+          kind: "failed",
+          message: userFacingErrorMessage(error, "Payment Vault status is unavailable"),
+        });
+      })
+      .finally(() => setBusy(null));
+  };
 
   useEffect(() => {
-    let active = true;
-    const loadAccount = () => {
-      void getAptAccount()
-        .then(({ account }) => {
-          if (active) setState({ kind: "ready", account });
-        })
-        .catch((error: unknown) => {
-          if (active) {
-            setState({
-              kind: "failed",
-              message:
-                error instanceof Error ? error.message : "APT account is unavailable",
-            });
-          }
-        });
-    };
-    loadAccount();
-    window.addEventListener("private-rollup:session-authenticated", loadAccount);
+    loadStatus();
+    window.addEventListener("private-rollup:session-authenticated", loadStatus);
     return () => {
-      active = false;
-      window.removeEventListener("private-rollup:session-authenticated", loadAccount);
+      window.removeEventListener("private-rollup:session-authenticated", loadStatus);
     };
   }, []);
 
-  async function syncDeposits() {
-    setBusy("sync");
-    setNotice(undefined);
-    setLastSubmittedHash(undefined);
-    try {
-      const { account } = await syncAptDeposits();
-      setState({ kind: "ready", account });
-      setNotice("On-chain APT balance synced successfully.");
-    } catch (error) {
-      setNotice(userFacingErrorMessage(error, "APT sync failed"));
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function deposit() {
-    if (state.kind !== "ready" || !connected) return;
-    setBusy("deposit");
-    setNotice(undefined);
-    setLastSubmittedHash(undefined);
-    try {
-      const amountOctas = parseAptToOctas(depositAmount);
-      if (amountOctas <= 0) throw new Error("Enter an amount greater than zero");
-      setNotice("Waiting for wallet approval...");
-      const { account, transactionHash } = await depositToServiceWallet({
-        amountOctas,
-        recipientAddress: state.account.wallet.address,
-        previousBalanceOctas: state.account.balanceOctas,
-        signAndSubmitTransaction,
-        syncDeposits: syncAptDeposits,
-        onSubmitted: (transactionHash) => {
-          setLastSubmittedHash(transactionHash);
-          setNotice(
-            `Deposit submitted: ${shortHash(transactionHash)}. Refreshing service wallet balance...`,
-          );
-        },
-      });
-      setState({ kind: "ready", account });
-      setDepositAmount("");
-      setNotice(`Deposit confirmed: ${shortHash(transactionHash)}`);
-    } catch (error) {
-      setNotice(userFacingErrorMessage(error, "APT deposit failed"));
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function withdraw() {
-    if (state.kind !== "ready") return;
+  async function withdrawRefund() {
+    if (state.kind !== "ready" || !state.status.contractAddress || !connected) return;
     setBusy("withdraw");
     setNotice(undefined);
-    setLastSubmittedHash(undefined);
     try {
       const amountOctas = parseAptToOctas(amount);
       if (amountOctas <= 0) throw new Error("Enter an amount greater than zero");
-      const result = await withdrawAvailableApt({
-        amountOctas,
-        idempotencyKey: crypto.randomUUID(),
-      });
-      setState({ kind: "ready", account: result.account });
+      if (amountOctas > state.status.refundableOctas) {
+        throw new Error("Amount is greater than your refundable Payment Vault balance");
+      }
+
+      const result = await signAndSubmitTransaction(
+        buildWithdrawRefundPayload({
+          contractAddress: state.status.contractAddress,
+          amountOctas,
+        }),
+      );
+      setNotice(`Refund withdrawal submitted: ${shortHash(extractTransactionHash(result))}`);
       setAmount("");
-      setNotice(`Withdrawal confirmed: ${shortHash(result.transactionHash)}`);
+      loadStatus();
     } catch (error) {
-      setNotice(userFacingErrorMessage(error, "APT withdrawal failed"));
+      setNotice(userFacingErrorMessage(error, "Refund withdrawal failed"));
     } finally {
       setBusy(null);
     }
-  }
-
-  async function copyAddress(address: string) {
-    await navigator.clipboard.writeText(address);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1600);
   }
 
   return (
     <section className="overflow-hidden rounded-xl border border-border bg-surface">
       <div className="border-b border-border bg-surface-low p-6">
         <p className="font-mono text-xs uppercase tracking-wider text-primary">
-          Real APT | Aptos Testnet
+          Payment Vault | Shelbynet
         </p>
-        <h2 className="mt-2 text-2xl font-semibold text-foreground">Service wallet</h2>
+        <h2 className="mt-2 text-2xl font-semibold text-foreground">Payment Vault</h2>
         <p className="mt-2 text-sm leading-relaxed text-muted">
-          This is real Testnet APT held in a wallet created only for your account.
-          Unused APT remains withdrawable; the displayed balance is backed by this wallet.
+          Your connected wallet pays each upload into the Payment Vault contract.
+          The contract pays Shelby, releases the platform fee only after success,
+          and keeps failed or unused amounts refundable to your wallet.
         </p>
       </div>
 
       {state.kind === "loading" ? (
-        <div className="p-6 text-sm text-muted">Creating and syncing your APT wallet...</div>
+        <div className="p-6 text-sm text-muted">Loading Payment Vault status...</div>
       ) : null}
       {state.kind === "failed" ? (
         <div className="p-6 text-sm text-error">{state.message}</div>
@@ -170,92 +100,63 @@ export function AptBalancePanel() {
             <div className="flex items-start gap-3">
               <ShieldCheck aria-hidden className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-foreground">Your APT deposit address</p>
+                <p className="text-sm font-semibold text-foreground">Payment Vault contract</p>
                 <p className="mt-1 text-xs leading-relaxed text-muted">
-                  Send only Aptos Testnet APT to this address. The server encrypts its
-                  signing key at rest and uses it only for pack payment and withdrawals.
+                  This contract is the payment wallet for uploads. The backend can
+                  coordinate upload status, but it cannot withdraw user refunds.
                 </p>
                 <code className="mt-3 block break-all rounded bg-surface-high p-3 text-xs text-primary">
-                  {state.account.wallet.address}
+                  {state.status.contractAddress || "Not configured"}
                 </code>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => copyAddress(state.account.wallet.address)}
-                    className="inline-flex min-h-10 items-center gap-2 rounded border border-border bg-surface px-3 text-xs font-semibold text-foreground hover:border-primary"
-                  >
-                    {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                    {copied ? "Copied" : "Copy address"}
-                  </button>
-                  <a
-                    href={`https://explorer.aptoslabs.com/account/${state.account.wallet.address}?network=testnet`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex min-h-10 items-center gap-2 rounded border border-border bg-surface px-3 text-xs font-semibold text-foreground hover:border-primary"
-                  >
-                    <ExternalLink className="h-4 w-4" /> View on explorer
-                  </a>
-                  <button
-                    type="button"
-                    onClick={syncDeposits}
+                    onClick={loadStatus}
                     disabled={busy !== null}
                     className="inline-flex min-h-10 items-center gap-2 rounded border border-border bg-surface px-3 text-xs font-semibold text-foreground hover:border-primary disabled:opacity-60"
                   >
-                    <RefreshCw className={`h-4 w-4 ${busy === "sync" ? "animate-spin" : ""}`} />
-                    Refresh balance
+                    <RefreshCw className={`h-4 w-4 ${busy === "refresh" ? "animate-spin" : ""}`} />
+                    Refresh vault status
                   </button>
+                  {state.status.contractAddress ? (
+                    <a
+                      href={`https://explorer.aptoslabs.com/account/${state.status.contractAddress}?network=testnet`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex min-h-10 items-center gap-2 rounded border border-border bg-surface px-3 text-xs font-semibold text-foreground hover:border-primary"
+                    >
+                      <ExternalLink className="h-4 w-4" /> View contract
+                    </a>
+                  ) : null}
                 </div>
               </div>
             </div>
           </div>
 
           <div className="grid gap-3">
-            <BalanceRow icon={<WalletCards className="h-4 w-4" />} label="Usable APT balance" value={formatApt(state.account.balanceOctas)} />
-            <BalanceRow icon={<Coins className="h-4 w-4" />} label="Available to withdraw" value={formatApt(state.account.availableOctas)} />
-            <BalanceRow icon={<LockKeyhole className="h-4 w-4" />} label="Reserved for open packs" value={formatApt(state.account.reservedOctas)} />
-          </div>
-
-          <div className="rounded-lg border border-primary/35 bg-background p-4">
-            <p className="text-sm font-semibold text-foreground">Deposit from your connected wallet</p>
-            <p className="mt-1 text-xs leading-relaxed text-muted">
-              Enter an amount, approve one Aptos Testnet transfer in your wallet,
-              and the app will sync it to your usable APT balance automatically.
-            </p>
-            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <label className="min-w-0 flex-1">
-                <span className="sr-only">APT amount to deposit</span>
-                <input
-                  value={depositAmount}
-                  onChange={(event) => setDepositAmount(event.currentTarget.value)}
-                  inputMode="decimal"
-                  placeholder="Amount in APT"
-                  className="min-h-11 w-full rounded border border-border bg-surface px-3 text-sm text-foreground outline-none focus:border-primary"
-                />
-              </label>
-              <button
-                type="button"
-                onClick={deposit}
-                disabled={!connected || !depositAmount || busy !== null}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded bg-primary px-4 text-sm font-semibold text-[#133155] disabled:opacity-50"
-              >
-                <WalletCards className="h-4 w-4" />
-                {busy === "deposit" ? "Waiting for wallet..." : "Deposit APT"}
-              </button>
-            </div>
+            <BalanceRow
+              icon={<LockKeyhole className="h-4 w-4" />}
+              label="Reserved for pending uploads"
+              value={formatApt(state.status.reservedOctas)}
+            />
+            <BalanceRow
+              icon={<WalletCards className="h-4 w-4" />}
+              label="Refundable"
+              value={formatApt(state.status.refundableOctas)}
+            />
           </div>
 
           <div className="rounded-lg border border-border bg-background p-4">
-            <p className="text-sm font-semibold text-foreground">Withdraw to your connected wallet</p>
+            <p className="text-sm font-semibold text-foreground">Withdraw refundable APT</p>
             <p className="mt-1 text-xs leading-relaxed text-muted">
-              You may withdraw any available amount at any time. APT reserved for an
-              open pack unlocks when that pack settles or the upload is cancelled.
-              Aptos network gas is paid from this service wallet, so keep a small
-              gas buffer when withdrawing.
+              Refunds are withdrawn by your connected wallet directly from the
+              Payment Vault. The website prepares the transaction; your wallet signs it.
             </p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
               <label className="min-w-0 flex-1">
-                <span className="sr-only">APT amount to withdraw</span>
+                <span className="sr-only">APT amount to withdraw from Payment Vault</span>
                 <input
+                  aria-label="APT amount to withdraw from Payment Vault"
                   value={amount}
                   onChange={(event) => setAmount(event.currentTarget.value)}
                   inputMode="decimal"
@@ -265,59 +166,52 @@ export function AptBalancePanel() {
               </label>
               <button
                 type="button"
-                onClick={() => setAmount(octasToInput(maxDirectWithdrawalOctas(state.account.availableOctas)))}
-                disabled={maxDirectWithdrawalOctas(state.account.availableOctas) === 0 || busy !== null}
+                onClick={() => setAmount(octasToInput(state.status.refundableOctas))}
+                disabled={state.status.refundableOctas === 0 || busy !== null}
                 className="min-h-11 rounded border border-border bg-surface px-3 text-sm font-semibold text-foreground hover:border-primary disabled:opacity-50"
               >
                 Use maximum
               </button>
               <button
                 type="button"
-                onClick={withdraw}
-                disabled={!amount || busy !== null}
+                onClick={withdrawRefund}
+                disabled={!connected || !amount || busy !== null || !state.status.contractAddress}
                 className="inline-flex min-h-11 items-center justify-center gap-2 rounded bg-primary px-4 text-sm font-semibold text-[#133155] disabled:opacity-50"
               >
                 <ArrowUpFromLine className="h-4 w-4" />
-                {busy === "withdraw" ? "Withdrawing..." : "Withdraw APT"}
+                {busy === "withdraw" ? "Waiting for wallet..." : "Withdraw refund"}
               </button>
             </div>
           </div>
+
+          <section className="rounded-lg border border-border bg-background p-4">
+            <h3 className="text-sm font-semibold text-foreground">Recent vault requests</h3>
+            {state.status.reservations.length === 0 ? (
+              <p className="mt-2 text-sm text-muted">
+                No Payment Vault reservations are indexed for this wallet yet.
+              </p>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {state.status.reservations.slice(0, 5).map((request) => (
+                  <div
+                    key={request.requestId}
+                    className="grid gap-2 rounded border border-border bg-surface p-3 text-sm md:grid-cols-[1fr_auto_auto]"
+                  >
+                    <span className="font-mono text-primary">{request.requestId}</span>
+                    <span className="font-semibold text-foreground">{statusLabel(request.status)}</span>
+                    <span className="font-mono text-muted">
+                      {formatApt(request.refundableOctas)} refundable
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
 
           {notice ? (
             <p aria-live="polite" className="rounded-lg border border-border bg-surface-high p-3 text-xs text-muted-strong">
               {notice}
             </p>
-          ) : null}
-
-          {lastSubmittedHash ? (
-            <div className="rounded-lg border border-border bg-background p-4">
-              <p className="text-sm font-semibold text-foreground">Submitted transaction</p>
-              <p className="mt-1 text-xs leading-relaxed text-muted">
-                The wallet returned this transaction hash. Use the explorer link to
-                verify whether Aptos accepted it. The app refreshes the service
-                wallet balance automatically after deposits.
-              </p>
-              <code className="mt-3 block break-all rounded bg-surface-high p-3 text-xs text-primary">
-                {lastSubmittedHash}
-              </code>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => copyAddress(lastSubmittedHash)}
-                  className="inline-flex min-h-10 items-center gap-2 rounded border border-border bg-surface px-3 text-xs font-semibold text-foreground hover:border-primary"
-                >
-                  <Copy className="h-4 w-4" /> Copy hash
-                </button>
-                <a
-                  href={`https://explorer.aptoslabs.com/txn/${lastSubmittedHash}?network=testnet`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex min-h-10 items-center gap-2 rounded border border-border bg-surface px-3 text-xs font-semibold text-foreground hover:border-primary"
-                >
-                  <ExternalLink className="h-4 w-4" /> View submitted transaction
-                </a>
-              </div>
-            </div>
           ) : null}
         </div>
       ) : null}
@@ -351,14 +245,30 @@ export function userFacingErrorMessage(error: unknown, fallback = "Request faile
   return fallback;
 }
 
+function extractTransactionHash(result: unknown) {
+  if (
+    typeof result === "object" &&
+    result !== null &&
+    "hash" in result &&
+    typeof result.hash === "string" &&
+    /^0x[a-fA-F0-9]+$/.test(result.hash)
+  ) {
+    return result.hash;
+  }
+  throw new Error("Wallet did not return a transaction hash");
+}
+
 function octasToInput(octas: number) {
   return (octas / 100_000_000).toFixed(8).replace(/0+$/, "").replace(/\.$/, "");
 }
 
-function maxDirectWithdrawalOctas(availableOctas: number) {
-  return Math.max(0, availableOctas - DIRECT_WITHDRAWAL_GAS_BUFFER_OCTAS);
-}
-
 function shortHash(value: string) {
   return `${value.slice(0, 10)}...${value.slice(-8)}`;
+}
+
+function statusLabel(status: string) {
+  return status
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }

@@ -3,8 +3,12 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import { Check, Copy, ExternalLink, LogOut, Wallet } from "lucide-react";
-import { formatApt, getAptAccount, type AptAccountResponse } from "@/client/api/apt-account";
+import { formatApt } from "@/domain/apt";
 import { getWalletSession } from "@/client/api/auth";
+import {
+  getPaymentVaultStatus,
+  type PaymentVaultStatusResponse,
+} from "@/client/api/payment-vault";
 import {
   authenticateConnectedWallet,
   isExtensionWallet,
@@ -22,10 +26,10 @@ type HydratedSession =
       chainId: string;
       expiresAt: string;
     };
-type ServiceWalletState =
+type PaymentVaultState =
   | { kind: "idle" }
   | { kind: "loading" }
-  | { kind: "ready"; account: AptAccountResponse }
+  | { kind: "ready"; status: PaymentVaultStatusResponse }
   | { kind: "failed" };
 
 export function ConnectedWalletBadge() {
@@ -43,7 +47,7 @@ export function ConnectedWalletBadge() {
   const [message, setMessage] = useState("");
   const [isPanelOpen, setPanelOpen] = useState(false);
   const [pendingWalletName, setPendingWalletName] = useState<string | null>(null);
-  const [serviceWalletState, setServiceWalletState] = useState<ServiceWalletState>({ kind: "idle" });
+  const [paymentVaultState, setPaymentVaultState] = useState<PaymentVaultState>({ kind: "idle" });
   const isMounted = useSyncExternalStore(
     subscribeToClientReady,
     getClientReadySnapshot,
@@ -143,15 +147,15 @@ export function ConnectedWalletBadge() {
     }
 
     let active = true;
-    void getAptAccount()
-      .then(({ account: serviceAccount }) => {
+    void getPaymentVaultStatus()
+      .then((status) => {
         if (active) {
-          setServiceWalletState({ kind: "ready", account: serviceAccount });
+          setPaymentVaultState({ kind: "ready", status });
         }
       })
       .catch(() => {
         if (active) {
-          setServiceWalletState({ kind: "failed" });
+          setPaymentVaultState({ kind: "failed" });
         }
       });
 
@@ -245,7 +249,7 @@ export function ConnectedWalletBadge() {
   }
 
   function openPanel() {
-    setServiceWalletState(
+    setPaymentVaultState(
       displayAddress && hydratedSession.authenticated ? { kind: "loading" } : { kind: "idle" },
     );
     setPanelOpen(true);
@@ -271,7 +275,7 @@ export function ConnectedWalletBadge() {
       {isPanelOpen && hasActiveSession ? (
         <WalletDetailsDialog
           address={displayAddress}
-          serviceWalletState={serviceWalletState}
+          paymentVaultState={paymentVaultState}
           message={
             message ||
             (!connected && displayAddress
@@ -307,8 +311,8 @@ function WalletDetailsDialog({
   onClose,
   onLogout,
   onSignInWebSession,
+  paymentVaultState,
   status,
-  serviceWalletState,
   walletName,
 }: {
   address?: string;
@@ -318,12 +322,12 @@ function WalletDetailsDialog({
   onLogout: () => void;
   onSignInWebSession: () => void;
   status: WalletActionStatus;
-  serviceWalletState: ServiceWalletState;
+  paymentVaultState: PaymentVaultState;
   walletName?: string;
 }) {
   const [copied, setCopied] = useState(false);
 
-  async function copyServiceWalletAddress(addressToCopy: string) {
+  async function copyPaymentVaultAddress(addressToCopy: string) {
     await navigator.clipboard.writeText(addressToCopy);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1600);
@@ -343,7 +347,7 @@ function WalletDetailsDialog({
               Wallet details
             </h2>
             <p className="mt-1 text-sm text-muted">
-              Connected wallet signs in. The webapp service wallet pays upload fees.
+              Connected wallet signs login, upload payment, and refund withdrawal transactions.
             </p>
           </div>
           <button
@@ -358,7 +362,7 @@ function WalletDetailsDialog({
         <section className="mt-5 rounded-xl border border-border bg-background p-4">
           <h3 className="text-sm font-semibold text-foreground">Connected wallet</h3>
           <p className="mt-1 text-xs leading-relaxed text-muted">
-            Used for login and for approving deposits or withdrawals.
+            Used for login and for approving Payment Vault upload or refund transactions.
           </p>
           <dl className="mt-4 space-y-4">
             <DetailRow label="Wallet" value={walletName ?? "Aptos wallet"} />
@@ -368,15 +372,15 @@ function WalletDetailsDialog({
         </section>
 
         <section className="mt-4 rounded-xl border border-primary/35 bg-background p-4">
-          <h3 className="text-sm font-semibold text-foreground">Webapp service wallet</h3>
+          <h3 className="text-sm font-semibold text-foreground">Payment Vault</h3>
           <p className="mt-1 text-xs leading-relaxed text-muted">
-            This wallet is created by the webapp for your account and pays upload,
-            pack, Shelby, and Aptos gas fees.
+            This Shelbynet smart contract receives upload payments and pays Shelby.
+            The platform fee is released only after upload success.
           </p>
-          <ServiceWalletDetails
+          <PaymentVaultDetails
             copied={copied}
-            onCopy={copyServiceWalletAddress}
-            state={serviceWalletState}
+            onCopy={copyPaymentVaultAddress}
+            state={paymentVaultState}
           />
         </section>
 
@@ -407,60 +411,63 @@ function WalletDetailsDialog({
   );
 }
 
-function ServiceWalletDetails({
+function PaymentVaultDetails({
   copied,
   onCopy,
   state,
 }: {
   copied: boolean;
   onCopy: (address: string) => void;
-  state: ServiceWalletState;
+  state: PaymentVaultState;
 }) {
   if (state.kind === "loading") {
-    return <p className="mt-4 text-sm text-muted">Loading service wallet...</p>;
+    return <p className="mt-4 text-sm text-muted">Loading Payment Vault...</p>;
   }
   if (state.kind === "failed") {
     return (
       <p className="mt-4 rounded-lg border border-error/40 bg-surface p-3 text-sm text-error">
-        Service wallet balance is unavailable. Sign in again or refresh the page.
+        Payment Vault status is unavailable. Sign in again or refresh the page.
       </p>
     );
   }
   if (state.kind !== "ready") {
     return (
       <p className="mt-4 rounded-lg border border-border bg-surface p-3 text-sm text-muted">
-        Sign in to the web session to create and view your service wallet.
+        Sign in to the web session to view Payment Vault reservations and refunds.
       </p>
     );
   }
 
-  const wallet = state.account.wallet;
+  const vault = state.status;
   return (
     <>
       <dl className="mt-4 space-y-4">
-        <DetailRow label="Service wallet address" value={wallet.address} />
-        <DetailRow label="Available for uploads" value={formatApt(state.account.availableOctas)} />
-        <DetailRow label="Reserved for open packs" value={formatApt(state.account.reservedOctas)} />
-        <DetailRow label="Total service wallet balance" value={formatApt(state.account.balanceOctas)} />
+        <DetailRow label="Payment Vault contract" value={vault.contractAddress || "Not configured"} />
+        <DetailRow label="Reserved for pending uploads" value={formatApt(vault.reservedOctas)} />
+        <DetailRow label="Refundable" value={formatApt(vault.refundableOctas)} />
       </dl>
       <div className="mt-4 flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => onCopy(wallet.address)}
-          className="inline-flex min-h-10 items-center gap-2 rounded border border-border bg-surface px-3 text-xs font-semibold text-foreground hover:border-primary"
-        >
-          {copied ? <Check aria-hidden className="h-4 w-4" /> : <Copy aria-hidden className="h-4 w-4" />}
-          {copied ? "Copied" : "Copy address"}
-        </button>
-        <a
-          href={`https://explorer.aptoslabs.com/account/${wallet.address}?network=testnet`}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex min-h-10 items-center gap-2 rounded border border-border bg-surface px-3 text-xs font-semibold text-foreground hover:border-primary"
-        >
-          <ExternalLink aria-hidden className="h-4 w-4" />
-          View on explorer
-        </a>
+        {vault.contractAddress ? (
+          <>
+            <button
+              type="button"
+              onClick={() => onCopy(vault.contractAddress)}
+              className="inline-flex min-h-10 items-center gap-2 rounded border border-border bg-surface px-3 text-xs font-semibold text-foreground hover:border-primary"
+            >
+              {copied ? <Check aria-hidden className="h-4 w-4" /> : <Copy aria-hidden className="h-4 w-4" />}
+              {copied ? "Copied" : "Copy contract"}
+            </button>
+            <a
+              href={`https://explorer.aptoslabs.com/account/${vault.contractAddress}?network=testnet`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex min-h-10 items-center gap-2 rounded border border-border bg-surface px-3 text-xs font-semibold text-foreground hover:border-primary"
+            >
+              <ExternalLink aria-hidden className="h-4 w-4" />
+              View contract
+            </a>
+          </>
+        ) : null}
       </div>
     </>
   );

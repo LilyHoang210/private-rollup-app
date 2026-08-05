@@ -12,8 +12,8 @@ describe("dashboard content", () => {
 
   it("does not show demo pack data before real user data exists", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      if (String(input).includes("/api/apt-account")) {
-        return Response.json(aptAccountFixture());
+      if (String(input).includes("/api/payment-vault/status")) {
+        return Response.json(paymentVaultFixture());
       }
       return Response.json({ batches: [] });
     });
@@ -21,7 +21,9 @@ describe("dashboard content", () => {
     render(<DashboardPage />);
 
     expect(screen.getByRole("heading", { name: "Dashboard Overview" })).toBeVisible();
-    expect(await screen.findByText("Service wallet")).toBeVisible();
+    expect(await screen.findByText("Payment Vault")).toBeVisible();
+    expect(screen.getByText("Payment Vault contract")).toBeVisible();
+    expect(screen.getByText("Reserved for pending uploads")).toBeVisible();
     expect(screen.getAllByText("1 APT").length).toBeGreaterThan(0);
     expect(await screen.findByText("No live packs yet")).toBeVisible();
     expect(
@@ -36,8 +38,8 @@ describe("dashboard content", () => {
 
   it("shows queued encrypted uploads from the current wallet session", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      if (String(input).includes("/api/apt-account")) {
-        return Response.json(aptAccountFixture({ reservedOctas: 25_000 }));
+      if (String(input).includes("/api/payment-vault/status")) {
+        return Response.json(paymentVaultFixture({ reservedOctas: 25_000 }));
       }
       return Response.json({
         batches: [
@@ -84,8 +86,8 @@ describe("dashboard content", () => {
 
   it("renders dashboard metrics as comfortable horizontal rows", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      if (String(input).includes("/api/apt-account")) {
-        return Response.json(aptAccountFixture());
+      if (String(input).includes("/api/payment-vault/status")) {
+        return Response.json(paymentVaultFixture());
       }
       return Response.json({
         batches: [
@@ -108,8 +110,8 @@ describe("dashboard content", () => {
 
   it("shows locally cached uploads when the serverless API returns a stale empty list", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      if (String(input).includes("/api/apt-account")) {
-        return Response.json(aptAccountFixture());
+      if (String(input).includes("/api/payment-vault/status")) {
+        return Response.json(paymentVaultFixture());
       }
       return Response.json({ batches: [] });
     });
@@ -153,28 +155,13 @@ describe("dashboard content", () => {
   });
 });
 
-function aptAccountFixture(input?: { reservedOctas?: number }) {
+function paymentVaultFixture(input?: { reservedOctas?: number }) {
   const reservedOctas = input?.reservedOctas ?? 0;
   return {
-    account: {
-      balanceOctas: 100_000_000,
-      reservedOctas,
-      availableOctas: 100_000_000 - reservedOctas,
-      wallet: {
-        address: `0x${"a".repeat(64)}`,
-        network: "testnet",
-        onChainBalanceOctas: 100_000_000,
-      },
-      ledger: [
-        {
-          id: "entry-1",
-          type: "wallet_deposit",
-          amountOctas: 100_000_000,
-          reservedDeltaOctas: 0,
-          createdAt: "2026-08-01T07:15:00.000Z",
-        },
-      ],
-    },
+    contractAddress: "0x42",
+    reservedOctas,
+    refundableOctas: 100_000_000,
+    reservations: [],
   };
 }
 

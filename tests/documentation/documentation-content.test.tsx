@@ -25,5 +25,13 @@ describe("user-facing guidance content", () => {
     expect(combined).toContain("Petra");
     expect(combined).toContain("Martian");
     expect(combined).toContain("sign a login challenge");
+    expect(combined).toContain("Payment Vault contract");
+    expect(combined).toContain("How upload payment works");
+    expect(combined).toContain("How to recover files without this webapp");
+    expect(combined).toContain("How to claim a refund");
+    expect(combined).toContain("private-rollup recovery import ./recovery-kit.json");
+    expect(combined).toContain("private-rollup files list --receipts ./receipts");
+    expect(combined).toContain("private-rollup files pull <file-id> --receipt ./receipt.json --output ./restored");
+    expect(combined).toContain("aptos move run --function-id <vault>::payment_vault::withdraw_refund --args u64:<amount_octas>");
   });
 });

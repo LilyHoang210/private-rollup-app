@@ -95,9 +95,13 @@ describe("packs page", () => {
     expect(screen.getByText("897 B / 8.0 MiB")).toBeVisible();
     expect(screen.getByText("2 waiting batches")).toBeVisible();
     expect(screen.getByText("Upload threshold")).toBeVisible();
+    expect(screen.getByText("Uploads when")).toBeVisible();
     expect(screen.getAllByText("8.0 MiB")).not.toHaveLength(0);
     expect(screen.getByText("Maximum wait")).toBeVisible();
     expect(screen.getByText("05:00")).toBeVisible();
+    expect(screen.getByText("Your reserved share")).toBeVisible();
+    expect(screen.getByText("Settlement status")).toBeVisible();
+    expect(screen.getByText("Collecting")).toBeVisible();
     expect(screen.getByText("Auto-upload in 04:12 unless the pool reaches 8.0 MiB first.")).toBeVisible();
   });
 
@@ -253,6 +257,7 @@ function poolFixture(
     maxBytes: 50 * 1024 * 1024,
     maxWaitSeconds: 300,
     waitingBatchCount,
+    paymentStatus: "collecting",
     progressRatio: queuedBytes / (8 * 1024 * 1024),
     secondsRemaining: waitingBatchCount > 0 ? 240 : undefined,
     trigger: "waiting",

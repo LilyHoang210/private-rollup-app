@@ -10,6 +10,7 @@ const verifyWalletChallenge = vi.fn();
 const getWalletSession = vi.fn();
 const getAptBalance = vi.fn();
 const getAptAccount = vi.fn();
+const getPaymentVaultStatus = vi.fn();
 const connect = vi.fn();
 const disconnect = vi.fn();
 const signMessage = vi.fn();
@@ -50,6 +51,10 @@ vi.mock("../../src/client/api/apt-account", () => ({
   getAptAccount: (...args: unknown[]) => getAptAccount(...args),
 }));
 
+vi.mock("../../src/client/api/payment-vault", () => ({
+  getPaymentVaultStatus: (...args: unknown[]) => getPaymentVaultStatus(...args),
+}));
+
 vi.mock("@aptos-labs/wallet-adapter-react", () => ({
   useWallet: () => walletState.current,
 }));
@@ -79,6 +84,20 @@ describe("app shell", () => {
         },
         ledger: [],
       },
+    });
+    getPaymentVaultStatus.mockResolvedValue({
+      contractAddress: "0x42",
+      reservedOctas: 252_767,
+      refundableOctas: 40_000,
+      reservations: [
+        {
+          requestId: "vault_req_1",
+          status: "reserved",
+          totalLockedOctas: 252_767,
+          refundableOctas: 40_000,
+          deadlineAt: "2027-01-15T08:00:00.000Z",
+        },
+      ],
     });
     signMessage.mockResolvedValue({
       signature: "0xsig",
@@ -171,7 +190,7 @@ describe("app shell", () => {
     expect(screen.queryByRole("button", { name: "Connect wallet" })).not.toBeInTheDocument();
   });
 
-  it("opens connected wallet details with service wallet funds and logout", async () => {
+  it("opens connected wallet details with Payment Vault funds and logout", async () => {
     getWalletSession.mockResolvedValue({
       authenticated: true,
       walletAddress: "0x1234567890abcdef",
@@ -195,15 +214,15 @@ describe("app shell", () => {
     expect(screen.getByText("Connected wallet")).toBeVisible();
     expect(screen.getByText("Petra")).toBeVisible();
     expect(screen.getByText("0x1234567890abcdef")).toBeVisible();
-    expect(screen.getByText("Webapp service wallet")).toBeVisible();
-    expect(await screen.findByText(`0x${"9".repeat(64)}`)).toBeVisible();
-    expect(screen.getByText("Available for uploads")).toBeVisible();
-    expect(screen.getByText("0.003851 APT")).toBeVisible();
-    expect(screen.getByText("Reserved for open packs")).toBeVisible();
-    expect(screen.getByText("0.00015 APT")).toBeVisible();
-    expect(screen.getByText("Total service wallet balance")).toBeVisible();
-    expect(screen.getByText("0.004001 APT")).toBeVisible();
+    expect(screen.getByText("Payment Vault")).toBeVisible();
+    expect(screen.getByText("Reserved for pending uploads")).toBeVisible();
+    expect(screen.getByText("0.00252767 APT")).toBeVisible();
+    expect(screen.getByText("Refundable")).toBeVisible();
+    expect(screen.getByText("0.0004 APT")).toBeVisible();
+    expect(screen.queryByText(/service wallet/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/credit/i)).not.toBeInTheDocument();
     expect(screen.queryByText("1.23456789 APT")).not.toBeInTheDocument();
+    expect(getPaymentVaultStatus).toHaveBeenCalled();
     expect(getAptBalance).not.toHaveBeenCalled();
 
     await userEvent.click(screen.getByRole("button", { name: "Log out" }));

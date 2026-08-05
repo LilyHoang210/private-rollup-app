@@ -1,6 +1,21 @@
 import type { InputTransactionData } from "@aptos-labs/wallet-adapter-react";
 import type { VaultUploadQuote } from "@/server/vault/payment-vault-types";
 
+export interface PaymentVaultReservationSummary {
+  requestId: string;
+  status: string;
+  totalLockedOctas: number;
+  refundableOctas: number;
+  deadlineAt: string;
+}
+
+export interface PaymentVaultStatusResponse {
+  contractAddress: `0x${string}` | "";
+  reservedOctas: number;
+  refundableOctas: number;
+  reservations: PaymentVaultReservationSummary[];
+}
+
 export async function getVaultUploadQuote(input: {
   encryptedSizeBytes: number;
   retentionDays: "30" | "90" | "365";
@@ -46,6 +61,28 @@ export function buildUploadWithPaymentPayload(input: {
         input.quote.safetyBufferOctas,
         Math.floor(new Date(input.deadlineAt).getTime() / 1000),
       ],
+    },
+  };
+}
+
+export async function getPaymentVaultStatus(
+  fetcher: typeof fetch = fetch,
+): Promise<PaymentVaultStatusResponse> {
+  const response = await fetcher("/api/payment-vault/status");
+  if (!response.ok) {
+    throw new Error(`Payment Vault status request failed: ${response.status}`);
+  }
+  return (await response.json()) as PaymentVaultStatusResponse;
+}
+
+export function buildWithdrawRefundPayload(input: {
+  contractAddress: `0x${string}`;
+  amountOctas: number;
+}): InputTransactionData {
+  return {
+    data: {
+      function: `${input.contractAddress}::payment_vault::withdraw_refund`,
+      functionArguments: [input.amountOctas],
     },
   };
 }

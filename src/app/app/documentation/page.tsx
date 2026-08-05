@@ -5,14 +5,14 @@ const cliCommands = [
   {
     title: "Import recovery kit",
     label: "import recovery kit command",
-    command: "node ./private-rollup-cli.mjs recovery import ./recovery-kit.json",
+    command: "private-rollup recovery import ./recovery-kit.json",
     description:
       "./recovery-kit.json is the recovery kit file saved from Recovery. The CLI reads the file locally; do not paste private keys into the website or command.",
   },
   {
     title: "List files from receipts",
     label: "list receipts command",
-    command: "node ./private-rollup-cli.mjs files list --receipts ./receipts",
+    command: "private-rollup files list --receipts ./receipts",
     description:
       "./receipts is a local folder containing receipt.json files exported after uploads or pack verification.",
   },
@@ -20,9 +20,17 @@ const cliCommands = [
     title: "Restore one file",
     label: "restore one file command",
     command:
-      "node ./private-rollup-cli.mjs files pull <file-id> --receipt ./receipt.json --output ./restored",
+      "private-rollup files pull <file-id> --receipt ./receipt.json --output ./restored",
     description:
       "Replace <file-id> with the ID shown by the list command or inside receipt.json. ./restored is the output folder on your machine.",
+  },
+  {
+    title: "Claim a Payment Vault refund",
+    label: "withdraw refund command",
+    command:
+      "aptos move run --function-id <vault>::payment_vault::withdraw_refund --args u64:<amount_octas>",
+    description:
+      "Replace <vault> with the Payment Vault contract address and <amount_octas> with the refundable APT amount in octas.",
   },
 ];
 
@@ -127,6 +135,30 @@ export default function DocumentationPage() {
           <DocLink href="/app/upload" label="Open File Upload" />
           <DocLink href="/app/packs" label="Open Blob Packs" />
           <DocLink href="/app/recovery" label="Open Recovery" />
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-border bg-surface p-6">
+        <h2 className="text-2xl font-semibold text-foreground">Payment Vault contract</h2>
+        <p className="mt-2 max-w-3xl text-muted">
+          The Payment Vault is the webapp payment wallet. It receives the exact
+          upload payment from the connected wallet, pays Shelby after the pack
+          is ready, releases the platform fee only after success, and keeps
+          unused or failed-upload funds refundable.
+        </p>
+        <div className="mt-5 grid gap-4 md:grid-cols-3">
+          <IntroCard
+            title="How upload payment works"
+            body="Review the quote, sign one upload_with_payment transaction, then let the backend upload encrypted bytes and report settlement evidence."
+          />
+          <IntroCard
+            title="How to claim a refund"
+            body="Open the Payment Vault dashboard or run the Aptos CLI withdraw_refund command directly with the vault address and amount in octas."
+          />
+          <IntroCard
+            title="How to recover files without this webapp"
+            body="Keep recovery-kit.json and receipt.json locally, then use the CLI commands below from your own machine."
+          />
         </div>
       </section>
 

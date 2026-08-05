@@ -6,14 +6,14 @@ const recoveryCommands = [
   {
     title: "Import recovery kit",
     label: "import recovery kit command",
-    command: "node ./private-rollup-cli.mjs recovery import ./recovery-kit.json",
+    command: "private-rollup recovery import ./recovery-kit.json",
     helper:
       "The key comes from recovery-kit.json. Do not paste private keys into the website or terminal.",
   },
   {
     title: "List files from receipts",
     label: "list receipts command",
-    command: "node ./private-rollup-cli.mjs files list --receipts ./receipts",
+    command: "private-rollup files list --receipts ./receipts",
     helper:
       "Use the folder where you store receipt.json files after uploads.",
   },
@@ -21,9 +21,17 @@ const recoveryCommands = [
     title: "Pull one restored file",
     label: "restore one file command",
     command:
-      "node ./private-rollup-cli.mjs files pull <file-id> --receipt ./receipt.json --output ./restored",
+      "private-rollup files pull <file-id> --receipt ./receipt.json --output ./restored",
     helper:
       "Replace <file-id> with the file ID from the list command or receipt.json.",
+  },
+  {
+    title: "Withdraw a Payment Vault refund",
+    label: "withdraw refund command",
+    command:
+      "aptos move run --function-id <vault>::payment_vault::withdraw_refund --args u64:<amount_octas>",
+    helper:
+      "Use this if the website is unavailable but the contract shows refundable APT for your account.",
   },
 ];
 
@@ -56,6 +64,15 @@ export default function RecoveryPage() {
           title="Security checklist"
           body="Do not paste private keys into this website. Do not share recovery-kit.json. Keep receipts with your backups."
         />
+      </section>
+
+      <section className="rounded-xl border border-border bg-surface p-6">
+        <h2 className="text-2xl font-semibold text-foreground">Payment Vault contract</h2>
+        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted">
+          The Payment Vault is the upload payment wallet. If an upload fails
+          before success settlement, refundable APT remains claimable from the
+          contract even if this webapp stops operating.
+        </p>
       </section>
 
       <div className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
