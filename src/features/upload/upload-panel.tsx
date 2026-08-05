@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, FolderUp, PackageCheck, ShieldCheck, UploadCloud } from "lucide-react";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
-import { formatApt, getAptAccount, syncAptDeposits } from "@/client/api/apt-account";
-import { depositToServiceWallet } from "@/client/aptos/deposit";
-import { estimateReserveOctas } from "@/domain/apt";
+import { formatApt } from "@/domain/apt";
 import type { FileCategory, RetentionCohort } from "@/domain/files";
 import { PACK_STRATEGY_THRESHOLD_BYTES } from "@/domain/files";
+import {
+  buildUploadWithPaymentPayload,
+  getVaultUploadQuote,
+} from "@/client/api/payment-vault";
 import {
   completeUploadBatch,
   closePackNow,
@@ -30,6 +32,7 @@ import {
 } from "@/client/crypto/hpke";
 import { readLocalVaultPublicMaterial } from "@/client/vault/local-vault";
 import { downloadBatchReceipt } from "@/client/recovery/receipt-download";
+import type { VaultUploadQuote } from "@/server/vault/payment-vault-types";
 
 const CHUNK_SIZE_BYTES = 1024 * 1024;
 const categoryOptions: FileCategory[] = [
@@ -55,19 +58,13 @@ type StorageStatus =
     }
   | { kind: "failed" };
 
-type AptState =
+type VaultQuoteState =
   | { kind: "loading" }
-  | {
-      kind: "ready";
-      balanceOctas: number;
-      reservedOctas: number;
-      availableOctas: number;
-      walletAddress: string;
-    }
+  | { kind: "ready"; quote: VaultUploadQuote; contractAddress: `0x${string}` }
   | { kind: "failed" };
 
 export function UploadPanel() {
-  const { connected, signAndSubmitTransaction } = useWallet();
+  const { account, connected, signAndSubmitTransaction } = useWallet();
   const [files, setFiles] = useState<File[]>([]);
   const [label, setLabel] = useState("");
   const [category, setCategory] = useState<FileCategory>("document");
@@ -81,13 +78,9 @@ export function UploadPanel() {
   const [storageStatus, setStorageStatus] = useState<StorageStatus>({
     kind: "loading",
   });
-  const [aptState, setAptState] = useState<AptState>({ kind: "loading" });
-  const [depositState, setDepositState] = useState<
-    | { kind: "idle" }
-    | { kind: "depositing" }
-    | { kind: "failed"; message: string }
-    | { kind: "confirmed"; message: string }
-  >({ kind: "idle" });
+  const [vaultQuoteState, setVaultQuoteState] = useState<VaultQuoteState>({
+    kind: "loading",
+  });
   const [isClosingPack, setIsClosingPack] = useState(false);
   const [vaultMaterial] = useState(() => readLocalVaultPublicMaterial());
 
@@ -95,29 +88,12 @@ export function UploadPanel() {
     () => files.reduce((total, file) => total + file.size, 0),
     [files],
   );
-  const estimatedReserveOctas = useMemo(() => {
-    if (files.length === 0) {
-      return 0;
-    }
-
-    return estimateReserveOctas({
-      ciphertextBytes: selectedSize,
-      retentionDays,
-    });
-  }, [files.length, retentionDays, selectedSize]);
   const hasDedicatedFile = useMemo(
     () => files.some((file) => file.size >= PACK_STRATEGY_THRESHOLD_BYTES),
     [files],
   );
   const packMode = hasDedicatedFile ? "Dedicated Blob" : "Shared Pack";
-  const insufficientApt =
-    files.length > 0 &&
-    aptState.kind === "ready" &&
-    aptState.availableOctas < estimatedReserveOctas;
-  const missingAptOctas =
-    insufficientApt && aptState.kind === "ready"
-      ? estimatedReserveOctas - aptState.availableOctas
-      : 0;
+  const vaultMode = hasDedicatedFile ? "dedicated_blob" : "shared_pack";
 
   useEffect(() => {
     let active = true;
@@ -155,28 +131,35 @@ export function UploadPanel() {
   useEffect(() => {
     let active = true;
 
-    void getAptAccount()
-      .then(({ account }) => {
+    if (files.length === 0) {
+      setVaultQuoteState({ kind: "loading" });
+      return;
+    }
+
+    void getVaultUploadQuote({
+      encryptedSizeBytes: Math.max(1, selectedSize),
+      retentionDays: String(retentionDays) as "30" | "90" | "365",
+      mode: vaultMode,
+    })
+      .then(({ quote, payment }) => {
         if (active) {
-          setAptState({
+          setVaultQuoteState({
             kind: "ready",
-            balanceOctas: account.balanceOctas,
-            reservedOctas: account.reservedOctas,
-            availableOctas: account.availableOctas,
-            walletAddress: account.wallet.address,
+            quote,
+            contractAddress: payment.contractAddress,
           });
         }
       })
       .catch(() => {
         if (active) {
-          setAptState({ kind: "failed" });
+          setVaultQuoteState({ kind: "failed" });
         }
       });
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [files.length, retentionDays, selectedSize, vaultMode]);
 
   async function submitUpload() {
     if (files.length === 0) {
@@ -197,14 +180,10 @@ export function UploadPanel() {
       });
       return;
     }
-    if (insufficientApt) {
+    if (!connected || !account?.address) {
       setState({
         kind: "failed",
-        message: insufficientAptMessage({
-          reserveOctas: estimatedReserveOctas,
-          availableOctas: aptState.availableOctas,
-          missingOctas: missingAptOctas,
-        }),
+        message: "Connect your Aptos wallet before paying for an upload.",
       });
       return;
     }
@@ -228,9 +207,33 @@ export function UploadPanel() {
           aad: item.aad,
         })),
       );
+      const actualQuoteResponse = await getVaultUploadQuote({
+        encryptedSizeBytes: encryptedPack.bytes.byteLength,
+        retentionDays: String(retentionDays) as "30" | "90" | "365",
+        mode: vaultMode,
+      });
+      if (!/^0x[a-fA-F0-9]+$/.test(actualQuoteResponse.payment.contractAddress)) {
+        throw new Error("Payment Vault contract is not configured.");
+      }
+      const vaultRequestId = globalThis.crypto.randomUUID();
+      const deadlineAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+      const paymentResult = await signAndSubmitTransaction(
+        buildUploadWithPaymentPayload({
+          contractAddress: actualQuoteResponse.payment.contractAddress,
+          requestId: vaultRequestId,
+          quote: actualQuoteResponse.quote,
+          blobOrPackNameHash: encryptedPack.sha256,
+          commitmentRoot: encryptedPack.sha256,
+          deadlineAt,
+        }),
+      );
+      const reservationTransactionHash = extractTransactionHash(paymentResult);
       const apiItems = uploadItems.map(toApiUploadItem);
       const created = await createUploadBatch({
-        idempotencyKey: globalThis.crypto.randomUUID(),
+        idempotencyKey: vaultRequestId,
+        userAddress: account.address.toString() as `0x${string}`,
+        vaultRequestId,
+        reservationTransactionHash,
         retentionDays,
         items: apiItems,
       });
@@ -264,56 +267,7 @@ export function UploadPanel() {
       const message = error instanceof Error ? error.message : "Upload failed.";
       setState({
         kind: "failed",
-        message:
-          message.includes("Insufficient available APT")
-            ? insufficientAptMessage({
-                reserveOctas: estimatedReserveOctas,
-                availableOctas:
-                  aptState.kind === "ready" ? aptState.availableOctas : 0,
-                missingOctas:
-                  aptState.kind === "ready"
-                    ? Math.max(0, estimatedReserveOctas - aptState.availableOctas)
-                    : estimatedReserveOctas,
-              })
-            : message,
-      });
-    }
-  }
-
-  async function depositMissingApt() {
-    if (aptState.kind !== "ready" || missingAptOctas <= 0) return;
-    if (!connected) {
-      setDepositState({
-        kind: "failed",
-        message: "Connect your Aptos wallet before depositing to the service wallet.",
-      });
-      return;
-    }
-
-    setDepositState({ kind: "depositing" });
-    try {
-      const { account, transactionHash } = await depositToServiceWallet({
-        amountOctas: missingAptOctas,
-        recipientAddress: aptState.walletAddress,
-        previousBalanceOctas: aptState.balanceOctas,
-        signAndSubmitTransaction,
-        syncDeposits: syncAptDeposits,
-      });
-      setAptState({
-        kind: "ready",
-        balanceOctas: account.balanceOctas,
-        reservedOctas: account.reservedOctas,
-        availableOctas: account.availableOctas,
-        walletAddress: account.wallet.address,
-      });
-      setDepositState({
-        kind: "confirmed",
-        message: `Deposit confirmed: ${shortAddress(transactionHash)}. Service wallet balance updated.`,
-      });
-    } catch (error) {
-      setDepositState({
-        kind: "failed",
-        message: userFacingErrorMessage(error, "APT deposit failed"),
+        message,
       });
     }
   }
@@ -359,7 +313,8 @@ export function UploadPanel() {
           <h2 className="text-2xl font-semibold text-foreground">Encrypted upload</h2>
           <p className="mt-2 max-w-2xl text-muted">
             Files are encrypted locally, packed as ciphertext, and written to
-            Shelby by the service account. Plaintext never leaves this browser.
+            Shelby after the Payment Vault reserves upload funds. Plaintext
+            never leaves this browser.
           </p>
         </div>
       </div>
@@ -384,10 +339,7 @@ export function UploadPanel() {
             </span>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <EligibilityRow
-              label="Paying wallet"
-              value="Webapp service wallet"
-            />
+            <EligibilityRow label="Paying wallet" value="Payment Vault" />
             <EligibilityRow
               label="Upload condition"
               value={
@@ -398,46 +350,40 @@ export function UploadPanel() {
             />
             <EligibilityRow label="Retention cohort" value={`${retentionDays} days`} />
             <EligibilityRow
-              label="Estimated reserve"
-              value={formatApt(estimatedReserveOctas)}
+              label="Total locked"
+              value={
+                vaultQuoteState.kind === "ready"
+                  ? formatApt(vaultQuoteState.quote.totalLockedOctas)
+                  : "Loading..."
+              }
             />
             <EligibilityRow
-              label="Service wallet available"
+              label="Vault contract"
               value={
-                aptState.kind === "ready" ? formatApt(aptState.availableOctas) : "Loading..."
+                vaultQuoteState.kind === "ready"
+                  ? shortAddress(vaultQuoteState.contractAddress)
+                  : "Loading..."
               }
             />
           </div>
-          {insufficientApt ? (
-            <div className="mt-4 rounded-lg border border-error/50 bg-surface p-3 text-sm">
-              <p className="text-error">
-                Service wallet needs {formatApt(estimatedReserveOctas)} for this
-                upload. Available:{" "}
-                {aptState.kind === "ready" ? formatApt(aptState.availableOctas) : "0 APT"}.
-                Missing: {formatApt(missingAptOctas)}.
-              </p>
-              <button
-                type="button"
-                onClick={depositMissingApt}
-                disabled={!connected || depositState.kind === "depositing"}
-                className="mt-3 inline-flex min-h-10 items-center justify-center rounded bg-primary px-4 py-2 text-sm font-semibold text-[#133155] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {depositState.kind === "depositing"
-                  ? "Waiting for wallet..."
-                  : `Deposit ${formatApt(missingAptOctas)}`}
-              </button>
-            </div>
-          ) : null}
-          {depositState.kind === "failed" ? (
-            <p className="mt-3 rounded-lg border border-error/40 bg-surface p-3 text-sm text-error">
-              {depositState.message}
+          <div className="mt-4 rounded-lg border border-primary/35 bg-surface p-3 text-sm text-muted">
+            <h3 className="text-base font-semibold text-foreground">Review upload cost</h3>
+            {vaultQuoteState.kind === "ready" ? (
+              <dl className="mt-3 grid gap-2 md:grid-cols-2">
+                <CostRow label="Shelby upload fee" value={vaultQuoteState.quote.estimatedShelbyFeeOctas} />
+                <CostRow label="Storage fee" value={vaultQuoteState.quote.estimatedStorageFeeOctas} />
+                <CostRow label="Platform fee" value={vaultQuoteState.quote.platformFeeOctas} />
+                <CostRow label="Safety buffer" value={vaultQuoteState.quote.safetyBufferOctas} />
+              </dl>
+            ) : (
+              <p className="mt-2">Loading Payment Vault quote...</p>
+            )}
+            <p className="mt-3">
+              The Payment Vault pays Shelby. The platform fee is charged only
+              after the upload succeeds. If upload fails before settlement, your
+              locked amount is refundable.
             </p>
-          ) : null}
-          {depositState.kind === "confirmed" ? (
-            <p className="mt-3 rounded-lg border border-primary/40 bg-surface p-3 text-sm text-muted-strong">
-              {depositState.message}
-            </p>
-          ) : null}
+          </div>
         </section>
       ) : null}
 
@@ -535,16 +481,14 @@ export function UploadPanel() {
         {files.length > 0 ? (
           <div className="rounded-lg border border-border bg-surface px-4 py-3 text-sm">
             <p className="font-semibold text-foreground">
-              Estimated reserve: {formatApt(estimatedReserveOctas)}
+              Total locked:{" "}
+              {vaultQuoteState.kind === "ready"
+                ? formatApt(vaultQuoteState.quote.totalLockedOctas)
+                : "Loading..."}
             </p>
             <p className="mt-1 text-xs text-muted">
               Final pack cost is settled by encrypted bytes after the pack closes.
             </p>
-            {aptState.kind === "ready" ? (
-              <p className="mt-1 text-xs text-muted">
-                Service wallet available: {formatApt(aptState.availableOctas)}
-              </p>
-            ) : null}
           </div>
         ) : null}
 
@@ -552,12 +496,12 @@ export function UploadPanel() {
           data-action="upload.encrypt_queue"
           type="button"
           onClick={submitUpload}
-          disabled={state.kind === "encrypting" || insufficientApt}
+          disabled={state.kind === "encrypting" || vaultQuoteState.kind !== "ready"}
           className="min-h-11 rounded bg-primary px-5 py-2 text-sm font-semibold text-[#133155] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70"
         >
           {state.kind === "encrypting"
             ? "Encrypting and staging ciphertext..."
-            : "Encrypt and join a pack"}
+            : "Pay and upload"}
         </button>
       </div>
 
@@ -841,27 +785,26 @@ function EligibilityRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function insufficientAptMessage(input: {
-  reserveOctas: number;
-  availableOctas: number;
-  missingOctas: number;
-}) {
-  return `Service wallet needs ${formatApt(input.reserveOctas)} for this upload. Available: ${formatApt(input.availableOctas)}. Missing: ${formatApt(input.missingOctas)}.`;
+function CostRow({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded border border-border bg-background px-3 py-2">
+      <dt className="font-semibold text-muted-strong">{label}</dt>
+      <dd className="font-mono text-foreground">{formatApt(value)}</dd>
+    </div>
+  );
 }
 
-function userFacingErrorMessage(error: unknown, fallback = "Request failed") {
-  if (error instanceof Error && error.message) return error.message;
-  if (typeof error === "string" && error.trim()) return error;
+function extractTransactionHash(result: unknown) {
   if (
-    typeof error === "object" &&
-    error !== null &&
-    "message" in error &&
-    typeof error.message === "string" &&
-    error.message.trim()
+    typeof result === "object" &&
+    result !== null &&
+    "hash" in result &&
+    typeof result.hash === "string" &&
+    /^0x[a-fA-F0-9]+$/.test(result.hash)
   ) {
-    return error.message;
+    return result.hash;
   }
-  return fallback;
+  throw new Error("Payment Vault transaction did not return a valid hash.");
 }
 
 function formatBytes(bytes: number) {

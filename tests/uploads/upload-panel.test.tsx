@@ -23,8 +23,10 @@ vi.mock("@aptos-labs/wallet-adapter-react", () => ({
 
 describe("upload panel", () => {
   beforeEach(async () => {
+    vi.clearAllMocks();
     localStorage.clear();
     walletHookMock.mockReturnValue({
+      account: { address: `0x${"c".repeat(64)}` },
       connected: true,
       signAndSubmitTransaction: signAndSubmitTransactionMock,
     });
@@ -43,8 +45,8 @@ describe("upload panel", () => {
         if (url.includes("/api/storage/status")) {
           return Response.json(storageReadyFixture());
         }
-        if (url.includes("/api/apt-account")) {
-          return Response.json(aptAccountFixture());
+        if (url.includes("/api/payment-vault/quote")) {
+          return Response.json(vaultQuoteFixture());
         }
         if (url === "/api/uploads" && init?.method === "POST") {
           return Response.json(uploadFixture("staging"), { status: 201 });
@@ -63,10 +65,17 @@ describe("upload panel", () => {
     );
     await userEvent.type(screen.getByLabelText("Private local label"), "Personal docs");
     await userEvent.click(
-      screen.getByRole("button", { name: "Encrypt and join a pack" }),
+      await screen.findByRole("button", { name: "Pay and upload" }),
     );
 
     expect(await screen.findByText(/Encrypted upload queued/i)).toBeVisible();
+    expect(signAndSubmitTransactionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          function: "0x42::payment_vault::upload_with_payment",
+        }),
+      }),
+    );
     const uploadCall = fetchMock.mock.calls.find(
       (call) => call[0] === "/api/uploads",
     );
@@ -74,6 +83,8 @@ describe("upload panel", () => {
     expect(String(uploadCall?.[1]?.body)).not.toContain("super secret plaintext");
     expect(String(uploadCall?.[1]?.body)).not.toContain("Personal docs");
     expect(String(uploadCall?.[1]?.body)).not.toContain("packBytesBase64");
+    expect(String(uploadCall?.[1]?.body)).toContain("vaultRequestId");
+    expect(String(uploadCall?.[1]?.body)).toContain("reservationTransactionHash");
     expect(stageUploadMock).toHaveBeenCalledWith(
       expect.stringMatching(/^staging\/batch-1\/.+\.prp$/),
       expect.any(Blob),
@@ -95,7 +106,10 @@ describe("upload panel", () => {
           mode: "control_plane_only",
         });
       }
-      return Response.json(aptAccountFixture());
+      if (String(input).includes("/api/payment-vault/quote")) {
+        return Response.json(vaultQuoteFixture());
+      }
+      return Response.json({ error: "NOT_FOUND" }, { status: 404 });
     });
 
     render(<UploadPanel />);
@@ -105,7 +119,7 @@ describe("upload panel", () => {
       new File(["hello"], "hello.txt", { type: "text/plain" }),
     );
     await userEvent.click(
-      screen.getByRole("button", { name: "Encrypt and join a pack" }),
+      await screen.findByRole("button", { name: "Pay and upload" }),
     );
 
     expect(await screen.findByText(/Shelby storage is not ready/)).toBeVisible();
@@ -114,13 +128,13 @@ describe("upload panel", () => {
     );
   });
 
-  it("explains pack eligibility and blocks upload when available APT is below reserve", async () => {
+  it("shows Payment Vault quote and does not mention service wallet credit", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       if (String(input).includes("/api/storage/status")) {
         return Response.json(storageReadyFixture());
       }
-      if (String(input).includes("/api/apt-account")) {
-        return Response.json(aptAccountFixture({ availableOctas: 0 }));
+      if (String(input).includes("/api/payment-vault/quote")) {
+        return Response.json(vaultQuoteFixture());
       }
       return Response.json({ error: "NOT_FOUND" }, { status: 404 });
     });
@@ -132,27 +146,32 @@ describe("upload panel", () => {
     );
 
     expect(await screen.findByText("Pack Eligibility & Cost")).toBeVisible();
+    expect(screen.getByText("Review upload cost")).toBeVisible();
     expect(screen.getByText("Shared Pack")).toBeVisible();
     expect(screen.getByLabelText("Upload condition: 8.0 MiB pool or 5 minute wait")).toBeVisible();
-    expect(screen.getByLabelText("Estimated reserve: 0.000015 APT")).toBeVisible();
-    expect(screen.getByLabelText("Service wallet available: 0 APT")).toBeVisible();
-    expect(screen.getByText(/Service wallet needs 0.000015 APT for this upload/)).toBeVisible();
-    expect(screen.getByRole("button", { name: "Deposit 0.000015 APT" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Encrypt and join a pack" })).toBeDisabled();
+    expect(await screen.findByText("Shelby upload fee")).toBeVisible();
+    expect(screen.getByText("Storage fee")).toBeVisible();
+    expect(screen.getByText("Platform fee")).toBeVisible();
+    expect(screen.getByText("Safety buffer")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Pay and upload" })).toBeEnabled();
+    expect(screen.queryByText(/service wallet/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/credit/i)).not.toBeInTheDocument();
     expect(fetchMock.mock.calls.some((call) => call[0] === "/api/uploads")).toBe(false);
   });
 
-  it("deposits missing APT from the connected wallet and auto-syncs service wallet availability", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+  it("blocks payment when the connected wallet is unavailable", async () => {
+    walletHookMock.mockReturnValue({
+      account: null,
+      connected: false,
+      signAndSubmitTransaction: signAndSubmitTransactionMock,
+    });
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
       if (url.includes("/api/storage/status")) {
         return Response.json(storageReadyFixture());
       }
-      if (url === "/api/apt-account") {
-        return Response.json(aptAccountFixture({ availableOctas: 0 }));
-      }
-      if (url === "/api/apt-account/sync" && init?.method === "POST") {
-        return Response.json(aptAccountFixture({ availableOctas: 1_500 }));
+      if (url.includes("/api/payment-vault/quote")) {
+        return Response.json(vaultQuoteFixture());
       }
       return Response.json({ error: "NOT_FOUND" }, { status: 404 });
     });
@@ -163,29 +182,41 @@ describe("upload panel", () => {
       new File(["hello"], "hello.txt", { type: "text/plain" }),
     );
 
-    await userEvent.click(await screen.findByRole("button", { name: "Deposit 0.000015 APT" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Pay and upload" }));
 
-    expect(signAndSubmitTransactionMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          function: "0x1::aptos_account::transfer",
-          functionArguments: [`0x${"a".repeat(64)}`, 1_500],
-        }),
-      }),
+    expect(await screen.findByText("Connect your Aptos wallet before paying for an upload.")).toBeVisible();
+    expect(signAndSubmitTransactionMock).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the Payment Vault contract is not configured", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/api/storage/status")) {
+        return Response.json(storageReadyFixture());
+      }
+      if (url.includes("/api/payment-vault/quote")) {
+        return Response.json(vaultQuoteFixture({ contractAddress: "" }));
+      }
+      return Response.json({ error: "NOT_FOUND" }, { status: 404 });
+    });
+
+    render(<UploadPanel />);
+    await userEvent.upload(
+      screen.getByLabelText("Select files"),
+      new File(["hello"], "hello.txt", { type: "text/plain" }),
     );
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/apt-account/sync",
-      expect.objectContaining({ method: "POST" }),
-    );
-    expect(await screen.findByLabelText("Service wallet available: 0.000015 APT")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Encrypt and join a pack" })).toBeEnabled();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Pay and upload" }));
+
+    expect(await screen.findByText("Payment Vault contract is not configured.")).toBeVisible();
+    expect(signAndSubmitTransactionMock).not.toHaveBeenCalled();
   });
 
   it("shows the Shelby error and never fabricates a local completion", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
       if (url.includes("/api/storage/status")) return Response.json(storageReadyFixture());
-      if (url.includes("/api/apt-account")) return Response.json(aptAccountFixture());
+      if (url.includes("/api/payment-vault/quote")) return Response.json(vaultQuoteFixture());
       return Response.json(
         { message: "Shelby account needs more storage tokens." },
         { status: 502 },
@@ -198,7 +229,7 @@ describe("upload panel", () => {
       new File(["hello"], "hello.txt", { type: "text/plain" }),
     );
     await userEvent.click(
-      screen.getByRole("button", { name: "Encrypt and join a pack" }),
+      await screen.findByRole("button", { name: "Pay and upload" }),
     );
 
     expect(
@@ -219,19 +250,23 @@ function storageReadyFixture() {
   };
 }
 
-function aptAccountFixture(input?: { availableOctas?: number }) {
-  const availableOctas = input?.availableOctas ?? 100_000_000;
+function vaultQuoteFixture(input?: { contractAddress?: string }) {
   return {
-    account: {
-      balanceOctas: availableOctas,
-      reservedOctas: 0,
-      availableOctas,
-      wallet: {
-        address: `0x${"a".repeat(64)}`,
-        network: "testnet",
-        onChainBalanceOctas: 100_000_000,
-      },
-      ledger: [],
+    quote: {
+      encryptedSizeBytes: 1_048_576,
+      retentionDays: "90",
+      mode: "shared_pack",
+      estimatedShelbyFeeOctas: 4_000,
+      estimatedStorageFeeOctas: 196_608,
+      platformFeeOctas: 10_031,
+      safetyBufferOctas: 42_128,
+      totalLockedOctas: 252_767,
+      refundPolicy: "full_refund_before_success_settlement",
+    },
+    payment: {
+      payer: "connected_wallet",
+      receiver: "payment_vault_contract",
+      contractAddress: input?.contractAddress ?? "0x42",
     },
   };
 }
@@ -242,7 +277,6 @@ function uploadFixture(status: "staging" | "waiting_for_pack") {
     status,
     retentionDays: 90,
     totalCiphertextSizeBytes: 38,
-    billing: { paymentStatus: "reserved", reserveOctas: 1_500 },
     items: [
       {
         id: "item-1",

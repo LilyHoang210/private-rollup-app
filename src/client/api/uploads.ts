@@ -64,7 +64,17 @@ export interface PackPoolResponse {
   targetBytes: number;
   maxBytes: number;
   maxWaitSeconds: number;
+  oldestBatchAgeSeconds?: number;
+  timeUntilForcedCloseSeconds?: number;
   waitingBatchCount: number;
+  paymentStatus:
+    | "collecting"
+    | "closing"
+    | "uploading"
+    | "settling"
+    | "settled"
+    | "failed"
+    | "refundable";
   progressRatio: number;
   oldestQueuedAt?: string;
   closesAt?: string;
@@ -80,6 +90,9 @@ export interface UploadEncryptedPackRequest extends CreateUploadBatchRequest {
 
 export interface CreateUploadBatchRequest {
   idempotencyKey: string;
+  userAddress: `0x${string}`;
+  vaultRequestId: string;
+  reservationTransactionHash: string;
   retentionDays: RetentionCohort;
   items: UploadApiItemInput[];
 }
