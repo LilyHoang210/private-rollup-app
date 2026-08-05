@@ -23,6 +23,7 @@ describe("upload API routes", () => {
           userAddress: "0xabc",
           vaultRequestId: "vault-route-1",
           reservationTransactionHash: "0x1234",
+          reservationDeadlineSecs: 1_800_000_000,
           retentionDays: 90,
           items: [
             {
@@ -107,6 +108,7 @@ describe("upload API routes", () => {
           userAddress: "0xabc",
           vaultRequestId: "vault-route-plaintext",
           reservationTransactionHash: "0x1234",
+          reservationDeadlineSecs: 1_800_000_000,
           retentionDays: 90,
           items: [
             {

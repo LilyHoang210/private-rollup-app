@@ -35,6 +35,7 @@ export interface CreateUploadBatchInput {
   retentionDays: RetentionCohort;
   vaultRequestId: string;
   reservationTransactionHash: string;
+  reservationDeadlineSecs: number;
   items: CreateUploadItemInput[];
 }
 
@@ -66,6 +67,12 @@ export interface UploadBatchRecord {
   idempotencyKey: string;
   retentionDays: RetentionCohort;
   status: UploadStatus;
+  vault?: {
+    requestId: string;
+    userAddress: `0x${string}`;
+    transactionHash: string;
+    deadlineAt: string;
+  };
   totalCiphertextSizeBytes: number;
   billing?: UploadBillingRecord;
   storage?: ShelbyWriteReceipt;
@@ -129,6 +136,7 @@ export function createUploadBatch(input: CreateUploadBatchInput): UploadBatchRec
     userAddress: input.userAddress,
     vaultRequestId: input.vaultRequestId,
     reservationTransactionHash: input.reservationTransactionHash,
+    reservationDeadlineSecs: input.reservationDeadlineSecs,
     expectedEncryptedBytes: totalCiphertextSizeBytes,
     expectedRetentionDays: String(retentionDays) as "30" | "90" | "365",
   });
@@ -139,6 +147,12 @@ export function createUploadBatch(input: CreateUploadBatchInput): UploadBatchRec
     idempotencyKey,
     retentionDays,
     status: "staging",
+    vault: {
+      requestId: input.vaultRequestId,
+      userAddress: input.userAddress,
+      transactionHash: input.reservationTransactionHash,
+      deadlineAt: new Date(input.reservationDeadlineSecs * 1000).toISOString(),
+    },
     totalCiphertextSizeBytes,
     items,
     createdAt: now,

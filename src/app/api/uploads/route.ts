@@ -36,6 +36,7 @@ const createUploadSchema = z
     userAddress: z.string().regex(/^0x[a-fA-F0-9]+$/),
     vaultRequestId: z.string().min(1),
     reservationTransactionHash: z.string().regex(/^0x[a-fA-F0-9]+$/),
+    reservationDeadlineSecs: z.number().int().positive(),
     retentionDays: z.union([z.literal(30), z.literal(90), z.literal(365)]),
     items: z.array(uploadItemSchema).min(1).max(1000),
   })

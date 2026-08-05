@@ -78,6 +78,7 @@ function queueSharedUpload(input: {
     userAddress: "0xabc",
     vaultRequestId: `vault-${input.idempotencyKey}`,
     reservationTransactionHash: "0x1234",
+    reservationDeadlineSecs: 1_800_000_000,
     idempotencyKey: input.idempotencyKey,
     retentionDays: 90,
     items: [

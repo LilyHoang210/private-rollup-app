@@ -18,8 +18,10 @@ import {
   uploadBillings,
   uploadItems,
   users,
+  vaultUploadRequests,
 } from "@/server/db/schema";
 import { assertVaultReservationReady } from "@/server/vault/payment-vault-service";
+import { quoteVaultUpload } from "@/server/vault/payment-vault-quote";
 import type {
   CompleteUploadBatchInput,
   CreateUploadBatchInput,
@@ -67,6 +69,7 @@ export async function createDurableUploadBatch(
       userAddress: input.userAddress,
       vaultRequestId: input.vaultRequestId,
       reservationTransactionHash: input.reservationTransactionHash,
+      reservationDeadlineSecs: input.reservationDeadlineSecs,
       expectedEncryptedBytes: totalCiphertextBytes,
       expectedRetentionDays: String(retentionDays) as "30" | "90" | "365",
     });
@@ -88,6 +91,19 @@ export async function createDurableUploadBatch(
       })
       .returning({ id: uploadBatches.id });
     if (!createdBatch) return;
+    await tx.insert(vaultUploadRequests).values(
+      buildVaultUploadRequestIndexRecord({
+        userId: user.id,
+        uploadBatchId: batchId,
+        userAddress: input.userAddress,
+        vaultRequestId: input.vaultRequestId,
+        reservationTransactionHash: input.reservationTransactionHash,
+        reservationDeadlineSecs: input.reservationDeadlineSecs,
+        retentionDays: String(retentionDays) as "30" | "90" | "365",
+        encryptedSizeBytes: totalCiphertextBytes,
+        contractAddress: readPaymentVaultContractAddress(),
+      }),
+    );
     await tx.insert(uploadItems).values(
       input.items.map((item) => ({
         id: randomUUID(),
@@ -263,6 +279,7 @@ async function loadBatchRecord(batch: typeof uploadBatches.$inferSelect) {
     idempotencyKey: batch.idempotencyKey,
     retentionDays: Number(batch.retentionDays) as RetentionCohort,
     status: batch.status as UploadStatus,
+    vault: await loadVaultReservationForBatch(batch.id),
     totalCiphertextSizeBytes: batch.ciphertextBytes,
     billing: billing
       ? {
@@ -293,6 +310,72 @@ async function loadBatchRecord(batch: typeof uploadBatches.$inferSelect) {
     createdAt: batch.createdAt.toISOString(),
     updatedAt: batch.updatedAt.toISOString(),
   } satisfies UploadBatchRecord;
+}
+
+export function buildVaultUploadRequestIndexRecord(input: {
+  userId: string;
+  uploadBatchId: string;
+  userAddress: `0x${string}`;
+  vaultRequestId: string;
+  reservationTransactionHash: string;
+  reservationDeadlineSecs: number;
+  retentionDays: "30" | "90" | "365";
+  encryptedSizeBytes: number;
+  contractAddress: `0x${string}`;
+}) {
+  const mode: "shared_pack" | "dedicated_blob" =
+    input.encryptedSizeBytes < 10 * 1024 * 1024
+      ? "shared_pack"
+      : "dedicated_blob";
+  const quote = quoteVaultUpload({
+    encryptedSizeBytes: input.encryptedSizeBytes,
+    retentionDays: input.retentionDays,
+    mode,
+  });
+
+  return {
+    userId: input.userId,
+    uploadBatchId: input.uploadBatchId,
+    requestId: input.vaultRequestId,
+    userAddress: input.userAddress,
+    contractAddress: input.contractAddress,
+    status: "reserved" as const,
+    encryptedSizeBytes: input.encryptedSizeBytes,
+    retentionDays: input.retentionDays,
+    mode,
+    estimatedShelbyFeeOctas: quote.estimatedShelbyFeeOctas,
+    estimatedStorageFeeOctas: quote.estimatedStorageFeeOctas,
+    platformFeeOctas: quote.platformFeeOctas,
+    safetyBufferOctas: quote.safetyBufferOctas,
+    totalLockedOctas: quote.totalLockedOctas,
+    transactionHash: input.reservationTransactionHash,
+    deadlineAt: new Date(input.reservationDeadlineSecs * 1000),
+  };
+}
+
+async function loadVaultReservationForBatch(batchId: string) {
+  const request = await getDatabase().query.vaultUploadRequests.findFirst({
+    where: eq(vaultUploadRequests.uploadBatchId, batchId),
+  });
+  if (!request) return undefined;
+
+  return {
+    requestId: request.requestId,
+    userAddress: request.userAddress as `0x${string}`,
+    transactionHash: request.transactionHash ?? "",
+    deadlineAt: request.deadlineAt.toISOString(),
+  };
+}
+
+function readPaymentVaultContractAddress(): `0x${string}` {
+  const value = process.env.PAYMENT_VAULT_CONTRACT_ADDRESS?.trim();
+  if (!value || !/^0x[a-fA-F0-9]+$/.test(value)) {
+    throw new DomainError(
+      "Payment Vault contract is not configured",
+      "PAYMENT_VAULT_NOT_CONFIGURED",
+    );
+  }
+  return value as `0x${string}`;
 }
 
 async function findUser(externalUserId: string) {

@@ -216,7 +216,8 @@ export function UploadPanel() {
         throw new Error("Payment Vault contract is not configured.");
       }
       const vaultRequestId = globalThis.crypto.randomUUID();
-      const deadlineAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+      const reservationDeadlineSecs = Math.floor(Date.now() / 1000) + 5 * 60;
+      const deadlineAt = new Date(reservationDeadlineSecs * 1000).toISOString();
       const paymentResult = await signAndSubmitTransaction(
         buildUploadWithPaymentPayload({
           contractAddress: actualQuoteResponse.payment.contractAddress,
@@ -234,6 +235,7 @@ export function UploadPanel() {
         userAddress: account.address.toString() as `0x${string}`,
         vaultRequestId,
         reservationTransactionHash,
+        reservationDeadlineSecs,
         retentionDays,
         items: apiItems,
       });

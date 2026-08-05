@@ -6,6 +6,7 @@ export function assertVaultReservationReady(input: {
   userAddress: `0x${string}`;
   vaultRequestId: string;
   reservationTransactionHash: string;
+  reservationDeadlineSecs: number;
   expectedEncryptedBytes: number;
   expectedRetentionDays: "30" | "90" | "365";
 }) {
@@ -25,6 +26,15 @@ export function assertVaultReservationReady(input: {
     throw new DomainError(
       "Payment Vault reservation transaction is invalid",
       "VAULT_RESERVATION_TX_INVALID",
+    );
+  }
+  if (
+    !Number.isSafeInteger(input.reservationDeadlineSecs) ||
+    input.reservationDeadlineSecs <= 0
+  ) {
+    throw new DomainError(
+      "Payment Vault reservation deadline is invalid",
+      "VAULT_RESERVATION_DEADLINE_INVALID",
     );
   }
 

@@ -27,6 +27,7 @@ describe("upload service", () => {
     userAddress: "0xabc" as const,
     vaultRequestId,
     reservationTransactionHash: "0x1234",
+    reservationDeadlineSecs: 1_800_000_000,
   });
 
   afterEach(() => {
@@ -78,9 +79,27 @@ describe("upload service", () => {
         items: [baseItem],
         vaultRequestId: "",
         reservationTransactionHash: "0xmissing",
+        reservationDeadlineSecs: 1_800_000_000,
         userAddress: "0xabc",
       }),
     ).toThrow("Payment Vault reservation is required before upload");
+  });
+
+  it("returns Payment Vault reservation metadata with the upload batch", () => {
+    const created = createUploadBatch({
+      userId: "demo-user",
+      ...vaultReservation("vault-visible-1"),
+      idempotencyKey: "idem-vault-visible",
+      retentionDays: 90,
+      items: [baseItem],
+    });
+
+    expect(created.vault).toEqual({
+      requestId: "vault-visible-1",
+      transactionHash: "0x1234",
+      userAddress: "0xabc",
+      deadlineAt: "2027-01-15T08:00:00.000Z",
+    });
   });
 
   it("does not accept plaintext payload fields", () => {
@@ -102,6 +121,7 @@ describe("upload service", () => {
         userAddress: "0xabc",
         vaultRequestId: "",
         reservationTransactionHash: "0x1234",
+        reservationDeadlineSecs: 1_800_000_000,
         idempotencyKey: "idem-insufficient-apt",
         retentionDays: 365,
         items: [
