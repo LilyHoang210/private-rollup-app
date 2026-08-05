@@ -42,6 +42,7 @@ export function AptBalancePanel() {
   const [depositAmount, setDepositAmount] = useState("");
   const [amount, setAmount] = useState("");
   const [notice, setNotice] = useState<string>();
+  const [lastSubmittedHash, setLastSubmittedHash] = useState<string>();
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -72,6 +73,7 @@ export function AptBalancePanel() {
   async function syncDeposits() {
     setBusy("sync");
     setNotice(undefined);
+    setLastSubmittedHash(undefined);
     try {
       const { account } = await syncAptDeposits();
       setState({ kind: "ready", account });
@@ -87,6 +89,7 @@ export function AptBalancePanel() {
     if (state.kind !== "ready" || !connected) return;
     setBusy("deposit");
     setNotice(undefined);
+    setLastSubmittedHash(undefined);
     try {
       const amountOctas = parseAptToOctas(depositAmount);
       if (amountOctas <= 0) throw new Error("Enter an amount greater than zero");
@@ -98,6 +101,7 @@ export function AptBalancePanel() {
           }),
         ),
       );
+      setLastSubmittedHash(submitted.hash);
       setNotice(`Deposit submitted: ${shortHash(submitted.hash)}. Syncing on-chain balance...`);
       const account = await waitForDeposit(state.account.balanceOctas);
       setState({ kind: "ready", account });
@@ -130,6 +134,7 @@ export function AptBalancePanel() {
     if (state.kind !== "ready") return;
     setBusy("withdraw");
     setNotice(undefined);
+    setLastSubmittedHash(undefined);
     try {
       const amountOctas = parseAptToOctas(amount);
       if (amountOctas <= 0) throw new Error("Enter an amount greater than zero");
@@ -295,6 +300,36 @@ export function AptBalancePanel() {
             <p aria-live="polite" className="rounded-lg border border-border bg-surface-high p-3 text-xs text-muted-strong">
               {notice}
             </p>
+          ) : null}
+
+          {lastSubmittedHash ? (
+            <div className="rounded-lg border border-border bg-background p-4">
+              <p className="text-sm font-semibold text-foreground">Submitted transaction</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted">
+                The wallet returned this transaction hash. Use the explorer link to
+                verify whether Aptos accepted it, then sync the service wallet balance.
+              </p>
+              <code className="mt-3 block break-all rounded bg-surface-high p-3 text-xs text-primary">
+                {lastSubmittedHash}
+              </code>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => copyAddress(lastSubmittedHash)}
+                  className="inline-flex min-h-10 items-center gap-2 rounded border border-border bg-surface px-3 text-xs font-semibold text-foreground hover:border-primary"
+                >
+                  <Copy className="h-4 w-4" /> Copy hash
+                </button>
+                <a
+                  href={`https://explorer.aptoslabs.com/txn/${lastSubmittedHash}?network=testnet`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex min-h-10 items-center gap-2 rounded border border-border bg-surface px-3 text-xs font-semibold text-foreground hover:border-primary"
+                >
+                  <ExternalLink className="h-4 w-4" /> View submitted transaction
+                </a>
+              </div>
+            </div>
           ) : null}
         </div>
       ) : null}

@@ -175,6 +175,11 @@ describe("APT balance panel", () => {
       },
       { timeout: 10_000 },
     );
+    expect(screen.getByText(`0x${"2".repeat(64)}`)).toBeVisible();
+    expect(screen.getByRole("link", { name: /view submitted transaction/i })).toHaveAttribute(
+      "href",
+      `https://explorer.aptoslabs.com/txn/0x${"2".repeat(64)}?network=testnet`,
+    );
     expect(screen.queryByText(/Deposit confirmed/)).not.toBeInTheDocument();
   }, 12_000);
 });
