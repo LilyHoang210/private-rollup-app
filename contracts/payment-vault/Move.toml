@@ -1,0 +1,10 @@
+[package]
+name = "PrivateRollupPaymentVault"
+version = "0.1.0"
+
+[addresses]
+private_rollup = "_"
+aptos_framework = "0x1"
+
+[dependencies]
+AptosFramework = { git = "https://github.com/aptos-labs/aptos-framework.git", subdir = "aptos-framework", rev = "b9c6e489be6c9a51ae2266a7f3ecec5b521d2f95" }

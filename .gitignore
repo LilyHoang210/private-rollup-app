@@ -35,6 +35,7 @@ yarn-error.log*
 
 # generated local review artifacts
 /artifacts/visual-verification/*.png
+/contracts/**/build/
 
 # env files (can opt-in for committing if needed)
 .env*
