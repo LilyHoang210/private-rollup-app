@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { DomainError } from "@/domain/errors";
 import { getAuthenticatedUserId } from "@/server/auth/request-session";
+import { closeEligiblePack } from "@/server/packs/worker";
 import { completeUploadBatchRuntime } from "@/server/uploads/runtime-service";
 
 interface CompleteUploadRouteContext {
@@ -35,6 +36,7 @@ export async function POST(request: Request, context: CompleteUploadRouteContext
       batchId: uploadId,
       ...body.data,
     });
+    void closeEligiblePack().catch(() => undefined);
 
     return NextResponse.json(batch);
   } catch (error) {

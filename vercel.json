@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/close-packs",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 3 * * *"
     }
   ]
 }
