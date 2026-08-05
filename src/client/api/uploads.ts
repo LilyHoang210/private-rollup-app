@@ -71,8 +71,6 @@ export interface PackPoolResponse {
   secondsRemaining?: number;
   trigger: "byte_threshold" | "wait_time" | "waiting";
   nextTrigger: "byte_threshold" | "wait_time";
-  oldestBatchId?: string;
-  userBatchIds: string[];
 }
 
 export interface UploadEncryptedPackRequest extends CreateUploadBatchRequest {

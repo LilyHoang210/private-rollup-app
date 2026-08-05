@@ -45,7 +45,7 @@ export function summarizePackPools(input: {
       retentionDays,
       batches: input.batches.filter(
         (batch) =>
-          batch.status === "waiting_for_pack" &&
+          ["waiting_for_pack", "retrying"].includes(batch.status) &&
           batch.retentionDays === retentionDays &&
           batch.items.every((item) => item.packStrategy !== "dedicated_blob"),
       ),

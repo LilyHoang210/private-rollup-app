@@ -32,6 +32,27 @@ describe("pack pool summary", () => {
       ]),
     );
   });
+
+  it("counts retrying shared batches as visible pool participants", () => {
+    const pools = summarizePackPools({
+      now: new Date("2026-08-01T12:01:00.000Z"),
+      batches: [
+        batch("retry-90", 90, 4096, "2026-08-01T12:00:00.000Z", false, "retrying"),
+      ],
+    });
+
+    expect(pools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          retentionDays: 90,
+          waitingBatchCount: 1,
+          queuedBytes: 4096,
+          oldestBatchId: "retry-90",
+          userBatchIds: ["retry-90"],
+        }),
+      ]),
+    );
+  });
 });
 
 function batch(

@@ -210,6 +210,13 @@ export function listUploadBatchesForUser(userId: string): UploadBatchRecord[] {
     .map(cloneBatch);
 }
 
+export function listUploadBatchesForPackPool(): UploadBatchRecord[] {
+  return Array.from(batchesById.values())
+    .filter((batch) => ["waiting_for_pack", "retrying"].includes(batch.status))
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+    .map(cloneBatch);
+}
+
 export function resetUploadStoreForTests() {
   batchesById.clear();
   idempotencyIndex.clear();

@@ -3,6 +3,7 @@ import {
   completeDurableUploadBatch,
   createDurableUploadBatch,
   getDurableUploadBatch,
+  listDurableUploadBatchesForPackPool,
   listDurableUploadBatchesForUser,
   type CompleteDurableUploadBatchInput,
 } from "./durable-service";
@@ -10,6 +11,7 @@ import {
   completeUploadBatch,
   createUploadBatch,
   getUploadBatch,
+  listUploadBatchesForPackPool,
   listUploadBatchesForUser,
   type CreateUploadBatchInput,
 } from "./service";
@@ -52,6 +54,13 @@ export async function listUploadBatchesForUserRuntime(userId: string) {
   return hasDatabaseConfiguration()
     ? listDurableUploadBatchesForUser(userId)
     : listUploadBatchesForUser(userId);
+}
+
+export async function listPackPoolBatchesRuntime() {
+  assertProductionDatabase();
+  return hasDatabaseConfiguration()
+    ? listDurableUploadBatchesForPackPool()
+    : listUploadBatchesForPackPool();
 }
 
 export async function getAptAccountRuntime(userId: string) {

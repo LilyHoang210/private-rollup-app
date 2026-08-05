@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { GET as getPackPools } from "../../src/app/api/packs/pool/route";
-import { createSessionCookie, createSessionToken } from "../../src/server/auth/session";
 import { recordWalletDeposit, resetAptStoreForTests } from "../../src/server/billing/apt-account-service";
 import { completeUploadBatch, createUploadBatch, resetUploadStoreForTests } from "../../src/server/uploads/service";
 
@@ -10,84 +9,96 @@ describe("pack pool API", () => {
     resetAptStoreForTests();
   });
 
-  it("requires a wallet session", async () => {
-    const response = await getPackPools(new Request("http://localhost/api/packs/pool"));
+  it("returns public empty aggregate pools without a wallet session", async () => {
+    const response = await getPackPools();
+    const body = await response.json();
 
-    expect(response.status).toBe(401);
-    await expect(response.json()).resolves.toMatchObject({ error: "AUTH_REQUIRED" });
+    expect(response.status).toBe(200);
+    expect(body.pools).toEqual([
+      expect.objectContaining({ retentionDays: 30, queuedBytes: 0, waitingBatchCount: 0 }),
+      expect.objectContaining({ retentionDays: 90, queuedBytes: 0, waitingBatchCount: 0 }),
+      expect.objectContaining({ retentionDays: 365, queuedBytes: 0, waitingBatchCount: 0 }),
+    ]);
   });
 
-  it("returns waiting shared pack pool progress for the signed wallet", async () => {
-    const userId = `wallet:${"a".repeat(64)}`;
-    recordWalletDeposit({
-      userId,
-      depositId: "pool-deposit",
-      amountOctas: 100_000_000,
+  it("returns aggregate shared pack progress without leaking private batch data", async () => {
+    const first = queueSharedUpload({
+      userId: `wallet:${"a".repeat(64)}`,
+      idempotencyKey: "pool-upload-a",
+      label: "First private label",
+      ciphertextSizeBytes: 1016,
+      hashChar: "a",
     });
-    const created = createUploadBatch({
-      userId,
-      idempotencyKey: "pool-upload",
-      retentionDays: 90,
-      items: [
-        {
-          localId: "file-1",
-          label: "Pool file",
-          category: "document",
-          plaintextSizeBytes: 1000,
-          ciphertextSizeBytes: 1016,
-          ciphertextSha256: "a".repeat(64),
-          encryptedManifest: "manifest",
-          wrappedDek: "dek",
-        },
-      ],
-    });
-    completeUploadBatch({
-      userId,
-      batchId: created.id,
-      items: [
-        {
-          localId: "file-1",
-          ciphertextSha256: "a".repeat(64),
-          stagingRef: "private-staging",
-        },
-      ],
+    const second = queueSharedUpload({
+      userId: `wallet:${"b".repeat(64)}`,
+      idempotencyKey: "pool-upload-b",
+      label: "Second private label",
+      ciphertextSizeBytes: 2048,
+      hashChar: "b",
     });
 
-    const response = await getPackPools(
-      new Request("http://localhost/api/packs/pool", {
-        headers: authHeaders("a".repeat(64)),
-      }),
-    );
+    const response = await getPackPools();
     const body = await response.json();
+    const serialized = JSON.stringify(body);
 
     expect(response.status).toBe(200);
     expect(body.pools).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           retentionDays: 90,
-          queuedBytes: 1016,
-          waitingBatchCount: 1,
+          queuedBytes: 3064,
+          waitingBatchCount: 2,
           targetBytes: 8 * 1024 * 1024,
           maxBytes: 50 * 1024 * 1024,
-          userBatchIds: [created.id],
         }),
       ]),
     );
+    expect(serialized).not.toContain(first.id);
+    expect(serialized).not.toContain(second.id);
+    expect(serialized).not.toContain("First private label");
+    expect(serialized).not.toContain("Second private label");
+    expect(serialized).not.toContain("wallet:");
   });
 });
 
-function authHeaders(walletAddressHash: string) {
-  const token = createSessionToken({
-    walletAddressHash,
-    chainId: "aptos-testnet",
-    maxAgeSeconds: 60,
-    secret: "private-rollup-dev-session-secret",
+function queueSharedUpload(input: {
+  userId: string;
+  idempotencyKey: string;
+  label: string;
+  ciphertextSizeBytes: number;
+  hashChar: string;
+}) {
+  recordWalletDeposit({
+    userId: input.userId,
+    depositId: `${input.idempotencyKey}-deposit`,
+    amountOctas: 100_000_000,
   });
-  const cookie = createSessionCookie({
-    token,
-    maxAgeSeconds: 60,
-    secure: false,
-  }).split(";")[0];
-
-  return { Cookie: cookie };
+  const created = createUploadBatch({
+    userId: input.userId,
+    idempotencyKey: input.idempotencyKey,
+    retentionDays: 90,
+    items: [
+      {
+        localId: "file-1",
+        label: input.label,
+        category: "document",
+        plaintextSizeBytes: input.ciphertextSizeBytes - 16,
+        ciphertextSizeBytes: input.ciphertextSizeBytes,
+        ciphertextSha256: input.hashChar.repeat(64),
+        encryptedManifest: "manifest",
+        wrappedDek: "dek",
+      },
+    ],
+  });
+  return completeUploadBatch({
+    userId: input.userId,
+    batchId: created.id,
+    items: [
+      {
+        localId: "file-1",
+        ciphertextSha256: input.hashChar.repeat(64),
+        stagingRef: "private-staging",
+      },
+    ],
+  });
 }

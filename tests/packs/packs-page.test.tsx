@@ -76,7 +76,6 @@ describe("packs page", () => {
                   secondsRemaining: 252,
                   trigger: "waiting",
                   nextTrigger: "wait_time",
-                  userBatchIds: ["batch-a", "batch-b"],
                 },
               ],
             }
@@ -95,7 +94,35 @@ describe("packs page", () => {
     expect(screen.getByText("90-day pool")).toBeVisible();
     expect(screen.getByText("897 B / 8.0 MiB")).toBeVisible();
     expect(screen.getByText("2 waiting batches")).toBeVisible();
+    expect(screen.getByText("Upload threshold")).toBeVisible();
+    expect(screen.getAllByText("8.0 MiB")).not.toHaveLength(0);
+    expect(screen.getByText("Maximum wait")).toBeVisible();
+    expect(screen.getByText("05:00")).toBeVisible();
     expect(screen.getByText("Auto-upload in 04:12 unless the pool reaches 8.0 MiB first.")).toBeVisible();
+  });
+
+  it("shows all public retention pools including empty pools", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+      Response.json(
+        String(input).includes("/api/packs/pool")
+          ? {
+              pools: [
+                poolFixture(30, 0, 0),
+                poolFixture(90, 897, 2),
+                poolFixture(365, 0, 0),
+              ],
+            }
+          : { batches: [] },
+      ),
+    );
+
+    render(<PacksPage />);
+
+    expect(await screen.findByText("30-day pool")).toBeVisible();
+    expect(screen.getByText("90-day pool")).toBeVisible();
+    expect(screen.getByText("365-day pool")).toBeVisible();
+    expect(screen.getAllByText("Waiting for files")).toHaveLength(2);
+    expect(screen.getByText("897 B / 8.0 MiB")).toBeVisible();
   });
 
   it("filters pack rows by search text", async () => {
@@ -187,18 +214,21 @@ function batchFixture(
   };
 }
 
-function poolFixture(retentionDays: 30 | 90 | 365, queuedBytes: number) {
+function poolFixture(
+  retentionDays: 30 | 90 | 365,
+  queuedBytes: number,
+  waitingBatchCount = 1,
+) {
   return {
     retentionDays,
     queuedBytes,
     targetBytes: 8 * 1024 * 1024,
     maxBytes: 50 * 1024 * 1024,
     maxWaitSeconds: 300,
-    waitingBatchCount: 1,
+    waitingBatchCount,
     progressRatio: queuedBytes / (8 * 1024 * 1024),
-    secondsRemaining: 240,
+    secondsRemaining: waitingBatchCount > 0 ? 240 : undefined,
     trigger: "waiting",
     nextTrigger: "wait_time",
-    userBatchIds: ["pool-batch"],
   };
 }

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { RetentionCohort } from "@/domain/files";
 import {
   MAX_BATCH_FILES,
@@ -192,6 +192,15 @@ export async function listDurableUploadBatchesForUser(userId: string) {
   const batches = await db.query.uploadBatches.findMany({
     where: eq(uploadBatches.userId, user.id),
     orderBy: [desc(uploadBatches.createdAt)],
+  });
+  return Promise.all(batches.map(loadBatchRecord));
+}
+
+export async function listDurableUploadBatchesForPackPool() {
+  const db = getDatabase();
+  const batches = await db.query.uploadBatches.findMany({
+    where: inArray(uploadBatches.status, ["waiting_for_pack", "retrying"]),
+    orderBy: [asc(uploadBatches.createdAt)],
   });
   return Promise.all(batches.map(loadBatchRecord));
 }

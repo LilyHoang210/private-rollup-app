@@ -307,8 +307,6 @@ function PackPoolPanel({
   pools: PackPoolResponse[];
   state: PackPoolState["kind"];
 }) {
-  const visiblePools = pools.filter((pool) => pool.waitingBatchCount > 0);
-
   return (
     <section className="border-b border-border bg-background p-5">
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
@@ -341,46 +339,71 @@ function PackPoolPanel({
         </p>
       ) : null}
 
-      {state === "ready" && visiblePools.length === 0 ? (
+      {state === "ready" && pools.length === 0 ? (
         <p className="mt-4 rounded-lg border border-border bg-surface p-4 text-sm text-muted">
-          No shared pack pools are waiting for this wallet session.
+          Pack pool data is empty. The app will show 30-day, 90-day, and 365-day
+          pools as soon as aggregate pool data is available.
         </p>
       ) : null}
 
-      {visiblePools.length > 0 ? (
+      {pools.length > 0 ? (
         <div className="mt-5 grid gap-4 lg:grid-cols-3">
-          {visiblePools.map((pool) => (
-            <article
-              key={pool.retentionDays}
-              className="rounded-xl border border-border bg-surface p-4"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="text-lg font-semibold text-foreground">
-                  {pool.retentionDays}-day pool
-                </h3>
-                <span className="rounded-full border border-primary/40 px-3 py-1 font-mono text-xs text-primary">
-                  {formatBatchCount(pool.waitingBatchCount)}
-                </span>
-              </div>
-              <div className="mt-4 h-3 overflow-hidden rounded-full bg-surface-high">
-                <div
-                  className="h-full rounded-full bg-primary"
-                  style={{
-                    width: `${Math.max(2, Math.round(pool.progressRatio * 100))}%`,
-                  }}
-                />
-              </div>
-              <p className="mt-3 font-mono text-sm text-foreground">
-                {formatBytes(pool.queuedBytes)} / {formatBytes(pool.targetBytes)}
-              </p>
-              <p className="mt-2 text-sm leading-relaxed text-muted">
-                {packPoolTriggerCopy(pool)}
-              </p>
-            </article>
+          {pools.map((pool) => (
+            <PoolCard key={pool.retentionDays} pool={pool} />
           ))}
         </div>
       ) : null}
     </section>
+  );
+}
+
+function PoolCard({ pool }: { pool: PackPoolResponse }) {
+  const progressPercent =
+    pool.queuedBytes > 0 ? Math.max(2, Math.round(pool.progressRatio * 100)) : 0;
+
+  return (
+    <article className="rounded-xl border border-border bg-surface p-4">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-lg font-semibold text-foreground">
+          {pool.retentionDays}-day pool
+        </h3>
+        <span className="rounded-full border border-primary/40 px-3 py-1 font-mono text-xs text-primary">
+          {pool.waitingBatchCount > 0
+            ? formatBatchCount(pool.waitingBatchCount)
+            : "Waiting for files"}
+        </span>
+      </div>
+      <div className="mt-4 h-3 overflow-hidden rounded-full bg-surface-high">
+        <div
+          className="h-full rounded-full bg-primary"
+          style={{ width: `${progressPercent}%` }}
+        />
+      </div>
+      <p className="mt-3 font-mono text-sm text-foreground">
+        {formatBytes(pool.queuedBytes)} / {formatBytes(pool.targetBytes)}
+      </p>
+      <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+        <div className="rounded-lg border border-border bg-background p-3">
+          <dt className="text-xs font-semibold uppercase tracking-wider text-muted-strong">
+            Upload threshold
+          </dt>
+          <dd className="mt-1 font-mono text-foreground">
+            {formatBytes(pool.targetBytes)}
+          </dd>
+        </div>
+        <div className="rounded-lg border border-border bg-background p-3">
+          <dt className="text-xs font-semibold uppercase tracking-wider text-muted-strong">
+            Maximum wait
+          </dt>
+          <dd className="mt-1 font-mono text-foreground">
+            {formatCountdown(pool.maxWaitSeconds)}
+          </dd>
+        </div>
+      </dl>
+      <p className="mt-3 text-sm leading-relaxed text-muted">
+        {packPoolTriggerCopy(pool)}
+      </p>
+    </article>
   );
 }
 
@@ -645,6 +668,9 @@ function formatCountdown(seconds?: number) {
 }
 
 function packPoolTriggerCopy(pool: PackPoolResponse) {
+  if (pool.waitingBatchCount === 0) {
+    return "Waiting for files. The timer starts when the first encrypted upload joins this retention pool.";
+  }
   if (pool.trigger === "byte_threshold") {
     return `Ready to upload because the pool reached ${formatBytes(pool.targetBytes)}.`;
   }

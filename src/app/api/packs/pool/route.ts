@@ -1,19 +1,30 @@
 import { NextResponse } from "next/server";
-import { getAuthenticatedUserId } from "@/server/auth/request-session";
-import { summarizePackPools } from "@/server/packs/pool-summary";
-import { listUploadBatchesForUserRuntime } from "@/server/uploads/runtime-service";
+import { summarizePackPools, type PackPoolSummary } from "@/server/packs/pool-summary";
+import { listPackPoolBatchesRuntime } from "@/server/uploads/runtime-service";
 
-export async function GET(request: Request) {
-  const userId = getAuthenticatedUserId(request);
-  if (!userId) {
-    return NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 401 });
-  }
-
-  const batches = await listUploadBatchesForUserRuntime(userId);
+export async function GET() {
+  const batches = await listPackPoolBatchesRuntime();
   return NextResponse.json({
     pools: summarizePackPools({
       now: new Date(),
       batches,
-    }),
+    }).map(toPublicPool),
   });
+}
+
+function toPublicPool(pool: PackPoolSummary) {
+  return {
+    retentionDays: pool.retentionDays,
+    queuedBytes: pool.queuedBytes,
+    targetBytes: pool.targetBytes,
+    maxBytes: pool.maxBytes,
+    maxWaitSeconds: pool.maxWaitSeconds,
+    waitingBatchCount: pool.waitingBatchCount,
+    progressRatio: pool.progressRatio,
+    oldestQueuedAt: pool.oldestQueuedAt,
+    closesAt: pool.closesAt,
+    secondsRemaining: pool.secondsRemaining,
+    trigger: pool.trigger,
+    nextTrigger: pool.nextTrigger,
+  };
 }
