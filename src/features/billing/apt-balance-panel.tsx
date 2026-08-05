@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { ArrowUpFromLine, Copy, ExternalLink, LockKeyhole, RefreshCw, ShieldCheck, WalletCards } from "lucide-react";
+import { ArrowUpFromLine, ExternalLink, LockKeyhole, RefreshCw, ShieldCheck, WalletCards } from "lucide-react";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import { formatApt } from "@/domain/apt";
 import { parseAptToOctas } from "@/domain/apt";
@@ -39,7 +39,7 @@ export function AptBalancePanel() {
   };
 
   useEffect(() => {
-    loadStatus();
+    queueMicrotask(loadStatus);
     window.addEventListener("private-rollup:session-authenticated", loadStatus);
     return () => {
       window.removeEventListener("private-rollup:session-authenticated", loadStatus);

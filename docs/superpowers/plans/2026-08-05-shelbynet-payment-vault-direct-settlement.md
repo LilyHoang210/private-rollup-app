@@ -8,6 +8,14 @@
 
 **Tech Stack:** Next.js 16, React 19, TypeScript 5, Vitest, Playwright, Drizzle/Postgres, Aptos TypeScript SDK 7.2.0, Aptos Move, Shelby SDK 0.4.1, Shelbynet/Testnet.
 
+## Execution Status
+
+- [x] Tasks 1-8 implemented and committed.
+- [x] Payment Vault reservation metadata is indexed for durable pack settlement.
+- [x] Header, dashboard billing, pack pool, recovery, and documentation UX now explain Payment Vault payment/refund behavior in English.
+- [x] Local verification passed: TypeScript, ESLint, Vitest, Next.js production build, Move unit tests, and Playwright E2E.
+- [ ] Live Shelbynet upload verification remains gated until `PAYMENT_VAULT_CONTRACT_ADDRESS` and Shelby direct-payment interface environment variables are configured in the deployed environment.
+
 ## Global Constraints
 
 - All visible website content must remain English.

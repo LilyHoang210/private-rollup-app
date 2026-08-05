@@ -10,6 +10,7 @@ const requiredTables = [
   "uploadBatches",
   "uploadItems",
   "uploadBillings",
+  "vaultUploadRequests",
   "aptAccounts",
   "aptLedger",
   "custodialWallets",

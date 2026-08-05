@@ -132,7 +132,6 @@ export function UploadPanel() {
     let active = true;
 
     if (files.length === 0) {
-      setVaultQuoteState({ kind: "loading" });
       return;
     }
 
@@ -401,7 +400,11 @@ export function UploadPanel() {
               multiple
               type="file"
               onChange={(event) => {
-                setFiles(Array.from(event.currentTarget.files ?? []));
+                const nextFiles = Array.from(event.currentTarget.files ?? []);
+                setFiles(nextFiles);
+                if (nextFiles.length === 0) {
+                  setVaultQuoteState({ kind: "loading" });
+                }
                 setState({ kind: "idle" });
               }}
               className="sr-only"

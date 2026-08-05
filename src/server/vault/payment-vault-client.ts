@@ -54,8 +54,9 @@ export class PaymentVaultClient {
   }
 
   async getReservation(
-    _requestId: string,
+    requestId: string,
   ): Promise<VaultUploadReservation | undefined> {
+    void requestId;
     return undefined;
   }
 }

@@ -4,7 +4,7 @@ test("primary app navigation reaches every top-level screen", async ({ page }) =
   await page.goto("/app");
 
   await page.getByRole("link", { name: "File Upload" }).first().click();
-  await expect(page.getByRole("heading", { name: "Upload Queue" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Upload Files" })).toBeVisible();
 
   await page.getByRole("link", { name: "Blob Packs" }).first().click();
   await expect(
