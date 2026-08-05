@@ -8,7 +8,7 @@ describe("Shelby direct payment capability detection", () => {
   it("reports unsupported when Shelby Move payment functions are not configured", () => {
     const capabilities = readShelbyDirectPaymentCapabilities({
       SHELBY_NETWORK: "shelbynet",
-    } as NodeJS.ProcessEnv);
+    } as unknown as NodeJS.ProcessEnv);
 
     expect(capabilities).toEqual({
       supported: false,
@@ -26,7 +26,7 @@ describe("Shelby direct payment capability detection", () => {
       SHELBY_DIRECT_REGISTER_FUNCTION: "0x1::shelby::register_blob",
       SHELBY_DIRECT_PAY_FUNCTION: "0x1::shelby::pay_storage",
       SHELBY_STORAGE_COIN_TYPE: "0x1::aptos_coin::AptosCoin",
-    } as NodeJS.ProcessEnv);
+    } as unknown as NodeJS.ProcessEnv);
 
     expect(capabilities).toMatchObject({
       supported: true,
@@ -43,7 +43,7 @@ describe("Shelby direct payment capability detection", () => {
     expect(() =>
       requireShelbyDirectPaymentCapabilities({
         SHELBY_NETWORK: "shelbynet",
-      } as NodeJS.ProcessEnv),
+      } as unknown as NodeJS.ProcessEnv),
     ).toThrow(
       "Shelby direct contract payment is not configured for this environment.",
     );

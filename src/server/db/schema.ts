@@ -231,6 +231,16 @@ export const paymentStatusEnum = pgEnum("payment_status", [
   "payment_required",
 ]);
 
+export const vaultUploadStatusEnum = pgEnum("vault_upload_status", [
+  "reserved",
+  "registering",
+  "uploading",
+  "settled",
+  "failed",
+  "refunded",
+  "expired",
+]);
+
 export const aptLedgerEntryTypeEnum = pgEnum("apt_ledger_entry_type", [
   "testnet_grant",
   "wallet_deposit",
@@ -283,6 +293,62 @@ export const uploadBillings = pgTable("upload_billings", {
   paymentStatus: paymentStatusEnum("payment_status").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const vaultUploadRequests = pgTable(
+  "vault_upload_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    uploadBatchId: uuid("upload_batch_id").references(() => uploadBatches.id),
+    requestId: text("request_id").notNull(),
+    userAddress: text("user_address").notNull(),
+    contractAddress: text("contract_address").notNull(),
+    status: vaultUploadStatusEnum("status").notNull(),
+    encryptedSizeBytes: bigint("encrypted_size_bytes", {
+      mode: "number",
+    }).notNull(),
+    retentionDays: retentionCohortEnum("retention_days").notNull(),
+    mode: packStrategyEnum("mode").notNull(),
+    estimatedShelbyFeeOctas: bigint("estimated_shelby_fee_octas", {
+      mode: "number",
+    }).notNull(),
+    estimatedStorageFeeOctas: bigint("estimated_storage_fee_octas", {
+      mode: "number",
+    }).notNull(),
+    platformFeeOctas: bigint("platform_fee_octas", {
+      mode: "number",
+    }).notNull(),
+    safetyBufferOctas: bigint("safety_buffer_octas", {
+      mode: "number",
+    }).notNull(),
+    totalLockedOctas: bigint("total_locked_octas", {
+      mode: "number",
+    }).notNull(),
+    actualShelbyCostOctas: bigint("actual_shelby_cost_octas", {
+      mode: "number",
+    }),
+    refundableOctas: bigint("refundable_octas", { mode: "number" })
+      .notNull()
+      .default(0),
+    transactionHash: text("transaction_hash"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    deadlineAt: timestamp("deadline_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("vault_upload_requests_request_id_unique").on(table.requestId),
+    index("vault_upload_requests_user_status_idx").on(
+      table.userId,
+      table.status,
+    ),
+  ],
+);
 
 export const aptLedger = pgTable(
   "apt_ledger",
@@ -408,6 +474,7 @@ export const schemaTables = {
   aptAccounts,
   custodialWallets,
   uploadBillings,
+  vaultUploadRequests,
   aptLedger,
   packMembers,
   receipts,
