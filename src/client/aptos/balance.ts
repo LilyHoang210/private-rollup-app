@@ -1,8 +1,9 @@
-import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
+import { Aptos, AptosConfig } from "@aptos-labs/ts-sdk";
+import { SHELBY_APTOS_NETWORK } from "@/config/shelbynet";
 
 const OCTAS_PER_APT = BigInt(100_000_000);
 const APT_DECIMALS = 8;
-const aptos = new Aptos(new AptosConfig({ network: Network.TESTNET }));
+const aptos = new Aptos(new AptosConfig({ network: SHELBY_APTOS_NETWORK }));
 
 export async function getAptBalance(address: string) {
   const octas = await aptos.getAccountAPTAmount({ accountAddress: address });

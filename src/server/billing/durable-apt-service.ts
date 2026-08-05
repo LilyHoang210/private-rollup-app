@@ -11,7 +11,7 @@ import {
 } from "./custodial-wallet-crypto";
 import {
   generateCustodialWallet,
-  getTestnetAptBalance,
+  getShelbynetAptBalance,
   submitCustodialAptWithdrawal,
 } from "./aptos-wallet";
 import type { AptAccount } from "./apt-account-service";
@@ -35,7 +35,7 @@ export async function ensureDurableCustodialWallet(externalUserId: string) {
     .values({
       userId: user.id,
       address: generated.address,
-      network: "testnet",
+      network: "shelbynet",
       encryptedSigningMaterial,
     })
     .onConflictDoNothing({ target: custodialWallets.userId })
@@ -57,7 +57,7 @@ export async function getDurableAptAccount(
 
 export async function syncDurableAptDeposits(externalUserId: string) {
   const wallet = await ensureDurableCustodialWallet(externalUserId);
-  const observedBalanceOctas = await getTestnetAptBalance(wallet.address).catch(
+  const observedBalanceOctas = await getShelbynetAptBalance(wallet.address).catch(
     (error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
       if (/account_not_found|resource_not_found|404/i.test(message)) return 0;
@@ -224,7 +224,7 @@ async function loadDurableAptAccount(
     availableOctas: account.balanceOctas - account.reservedOctas,
     wallet: {
       address: wallet.address,
-      network: "testnet",
+      network: "shelbynet",
       onChainBalanceOctas: wallet.lastObservedBalanceOctas,
       lastSyncedAt: wallet.lastSyncedAt?.toISOString(),
     },
@@ -242,7 +242,7 @@ async function loadDurableAptAccount(
 
 interface WalletView {
   address: string;
-  network: "testnet";
+  network: "shelbynet";
   onChainBalanceOctas: number;
   lastSyncedAt?: string;
 }

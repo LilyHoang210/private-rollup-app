@@ -2,6 +2,7 @@ import {
   createWalletChallenge,
   verifyWalletChallenge,
 } from "@/client/api/auth";
+import { SHELBY_AUTH_CHAIN_ID } from "@/config/shelbynet";
 
 export async function authenticateConnectedWallet({
   account,
@@ -30,7 +31,7 @@ export async function authenticateConnectedWallet({
     walletAddress,
     domain: window.location.hostname,
     uri: window.location.origin,
-    chainId: "aptos-testnet",
+    chainId: SHELBY_AUTH_CHAIN_ID,
   });
   const signedChallenge = await signMessage({
     address: true,

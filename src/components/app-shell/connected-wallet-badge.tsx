@@ -9,6 +9,7 @@ import {
   getPaymentVaultStatus,
   type PaymentVaultStatusResponse,
 } from "@/client/api/payment-vault";
+import { SHELBY_EXPLORER_NETWORK_PARAM } from "@/config/shelbynet";
 import {
   authenticateConnectedWallet,
   isExtensionWallet,
@@ -458,7 +459,7 @@ function PaymentVaultDetails({
               {copied ? "Copied" : "Copy contract"}
             </button>
             <a
-              href={`https://explorer.aptoslabs.com/account/${vault.contractAddress}?network=testnet`}
+              href={`https://explorer.aptoslabs.com/account/${vault.contractAddress}?network=${SHELBY_EXPLORER_NETWORK_PARAM}`}
               target="_blank"
               rel="noreferrer"
               className="inline-flex min-h-10 items-center gap-2 rounded border border-border bg-surface px-3 text-xs font-semibold text-foreground hover:border-primary"

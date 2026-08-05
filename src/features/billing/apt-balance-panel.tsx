@@ -10,6 +10,7 @@ import {
   getPaymentVaultStatus,
   type PaymentVaultStatusResponse,
 } from "@/client/api/payment-vault";
+import { SHELBY_EXPLORER_NETWORK_PARAM } from "@/config/shelbynet";
 
 type VaultState =
   | { kind: "loading" }
@@ -120,7 +121,7 @@ export function AptBalancePanel() {
                   </button>
                   {state.status.contractAddress ? (
                     <a
-                      href={`https://explorer.aptoslabs.com/account/${state.status.contractAddress}?network=testnet`}
+                      href={`https://explorer.aptoslabs.com/account/${state.status.contractAddress}?network=${SHELBY_EXPLORER_NETWORK_PARAM}`}
                       target="_blank"
                       rel="noreferrer"
                       className="inline-flex min-h-10 items-center gap-2 rounded border border-border bg-surface px-3 text-xs font-semibold text-foreground hover:border-primary"

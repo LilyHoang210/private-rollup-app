@@ -79,7 +79,7 @@ describe("app shell", () => {
         availableOctas: 385_100,
         wallet: {
           address: `0x${"9".repeat(64)}`,
-          network: "testnet",
+          network: "shelbynet",
           onChainBalanceOctas: 400_100,
         },
         ledger: [],
@@ -108,7 +108,7 @@ describe("app shell", () => {
       message: "challenge",
       expiresAt: "2026-08-01T00:05:00.000Z",
     });
-    verifyWalletChallenge.mockResolvedValue({ chainId: "aptos-testnet" });
+    verifyWalletChallenge.mockResolvedValue({ chainId: "aptos-shelbynet" });
     getWalletSession.mockResolvedValue({ authenticated: false });
   });
 
@@ -176,7 +176,7 @@ describe("app shell", () => {
       authenticated: true,
       walletAddress: "0x1e41676a3362e56f7e98c9d06ec847b0a4feb9e09c71046253a633de4ee2072a",
       walletAddressHash: "b".repeat(64),
-      chainId: "aptos-testnet",
+      chainId: "aptos-shelbynet",
       expiresAt: "2026-08-08T00:00:00.000Z",
     });
 
@@ -195,7 +195,7 @@ describe("app shell", () => {
       authenticated: true,
       walletAddress: "0x1234567890abcdef",
       walletAddressHash: "b".repeat(64),
-      chainId: "aptos-testnet",
+      chainId: "aptos-shelbynet",
       expiresAt: "2026-08-08T00:00:00.000Z",
     });
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
@@ -247,7 +247,7 @@ describe("app shell", () => {
       walletAddress: "0x1234567890abcdef",
       domain: "localhost",
       uri: "http://localhost:3000",
-      chainId: "aptos-testnet",
+      chainId: "aptos-shelbynet",
     });
     expect(verifyWalletChallenge).toHaveBeenCalledWith({
       challengeId: "challenge-id",
@@ -257,7 +257,7 @@ describe("app shell", () => {
       signature: "0xsig",
       fullMessage: "APTOS\nchallenge",
     });
-    expect(await screen.findByText("Connected on aptos-testnet.")).toBeVisible();
+    expect(await screen.findByText("Connected on aptos-shelbynet.")).toBeVisible();
   });
 
   it("logs out a server-hydrated session even when the wallet adapter is disconnected", async () => {
@@ -272,7 +272,7 @@ describe("app shell", () => {
       authenticated: true,
       walletAddress: "0x1e41676a3362e56f7e98c9d06ec847b0a4feb9e09c71046253a633de4ee2072a",
       walletAddressHash: "b".repeat(64),
-      chainId: "aptos-testnet",
+      chainId: "aptos-shelbynet",
       expiresAt: "2026-08-08T00:00:00.000Z",
     });
 

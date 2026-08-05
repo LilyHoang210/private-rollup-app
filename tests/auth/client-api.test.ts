@@ -10,7 +10,7 @@ describe("auth client API", () => {
       expect(String(input)).toBe("/api/auth/challenge");
       expect(JSON.parse(String(init?.body))).toMatchObject({
         walletAddress: "0xabc",
-        chainId: "aptos-testnet",
+        chainId: "aptos-shelbynet",
       });
 
       return Response.json({
@@ -26,7 +26,7 @@ describe("auth client API", () => {
           walletAddress: "0xabc",
           domain: "localhost",
           uri: "http://localhost",
-          chainId: "aptos-testnet",
+          chainId: "aptos-shelbynet",
         },
         fetcher,
       ),
@@ -49,7 +49,7 @@ describe("auth client API", () => {
         signature: "0xsig",
         fullMessage: "APTOS\nmessage",
       });
-      return Response.json({ chainId: "aptos-testnet" });
+      return Response.json({ chainId: "aptos-shelbynet" });
     };
 
     const result = await verifyWalletChallenge(
@@ -64,7 +64,7 @@ describe("auth client API", () => {
       fetcher,
     );
 
-    expect(result.chainId).toBe("aptos-testnet");
+    expect(result.chainId).toBe("aptos-shelbynet");
     expect(calls).toEqual(["/api/auth/verify"]);
   });
 });

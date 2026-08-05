@@ -20,7 +20,7 @@ describe("wallet auth challenge", () => {
       walletAddress: "0xabc",
       domain: "private-rollup.local",
       uri: "http://private-rollup.local",
-      chainId: "aptos-testnet",
+      chainId: "aptos-shelbynet",
       now,
     });
 
@@ -50,7 +50,7 @@ describe("wallet auth challenge", () => {
       walletAddress: "0xabc",
       domain: "private-rollup.local",
       uri: "http://private-rollup.local",
-      chainId: "aptos-testnet",
+      chainId: "aptos-shelbynet",
       now,
     });
 
@@ -88,7 +88,7 @@ describe("wallet auth challenge", () => {
       walletAddress: "0xabc",
       domain: "private-rollup.local",
       uri: "http://private-rollup.local",
-      chainId: "aptos-testnet",
+      chainId: "aptos-shelbynet",
       now,
     });
 
@@ -103,7 +103,7 @@ describe("wallet auth challenge", () => {
         now,
       }),
     ).resolves.toMatchObject({
-      chainId: "aptos-testnet",
+      chainId: "aptos-shelbynet",
       walletAddress: "0xabc",
     });
   });

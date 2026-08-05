@@ -9,7 +9,7 @@ describe("wallet scoped session token", () => {
     const token = createSessionToken({
       walletAddress: "0x1234",
       walletAddressHash: "a".repeat(64),
-      chainId: "aptos-testnet",
+      chainId: "aptos-shelbynet",
       maxAgeSeconds: 60,
       now: new Date("2026-08-01T00:00:00.000Z"),
       secret: "test-secret",
@@ -23,7 +23,7 @@ describe("wallet scoped session token", () => {
     ).toMatchObject({
       walletAddress: "0x1234",
       walletAddressHash: "a".repeat(64),
-      chainId: "aptos-testnet",
+      chainId: "aptos-shelbynet",
     });
     const [payload, signature] = token.split(".");
     const tamperedSignature = `${signature.startsWith("a") ? "b" : "a"}${signature.slice(1)}`;

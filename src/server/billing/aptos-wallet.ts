@@ -3,10 +3,10 @@ import {
   Aptos,
   AptosConfig,
   Ed25519PrivateKey,
-  Network,
 } from "@aptos-labs/ts-sdk";
+import { SHELBY_APTOS_NETWORK } from "@/config/shelbynet";
 
-const aptos = new Aptos(new AptosConfig({ network: Network.TESTNET }));
+const aptos = new Aptos(new AptosConfig({ network: SHELBY_APTOS_NETWORK }));
 const WITHDRAWAL_MAX_GAS_AMOUNT = 6_000;
 const WITHDRAWAL_GAS_UNIT_PRICE = 100;
 
@@ -33,7 +33,7 @@ export function addressFromPrivateKey(privateKey: string) {
   return accountFromPrivateKey(privateKey).accountAddress.toString();
 }
 
-export async function getTestnetAptBalance(address: string) {
+export async function getShelbynetAptBalance(address: string) {
   return aptos.getAccountAPTAmount({ accountAddress: address });
 }
 

@@ -93,7 +93,7 @@ describe("wallet connect panel", () => {
       message: "challenge",
       expiresAt: "2026-08-01T00:05:00.000Z",
     });
-    verifyWalletChallenge.mockResolvedValue({ chainId: "aptos-testnet" });
+    verifyWalletChallenge.mockResolvedValue({ chainId: "aptos-shelbynet" });
 
     const { rerender } = render(<WalletConnectPanel />);
 
@@ -119,7 +119,7 @@ describe("wallet connect panel", () => {
       walletAddress: "0xabc",
       domain: "localhost",
       uri: "http://localhost:3000",
-      chainId: "aptos-testnet",
+      chainId: "aptos-shelbynet",
     });
     expect(verifyWalletChallenge).toHaveBeenCalledWith({
       challengeId: "challenge-id",
@@ -129,7 +129,7 @@ describe("wallet connect panel", () => {
       signature: "0xsig",
       fullMessage: "APTOS\nchallenge",
     });
-    expect(await screen.findByText(/Connected 0xabc on aptos-testnet/)).toBeVisible();
+    expect(await screen.findByText(/Connected 0xabc on aptos-shelbynet/)).toBeVisible();
     expect(routerPush).toHaveBeenCalledWith("/app/setup");
   });
 });

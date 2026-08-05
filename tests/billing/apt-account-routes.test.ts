@@ -40,7 +40,7 @@ describe("APT account API route", () => {
 function authHeaders(walletAddressHash: string) {
   const token = createSessionToken({
     walletAddressHash,
-    chainId: "aptos-testnet",
+    chainId: "aptos-shelbynet",
     maxAgeSeconds: 60,
     secret: "private-rollup-dev-session-secret",
   });

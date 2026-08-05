@@ -24,7 +24,7 @@ export interface AptAccountResponse {
   availableOctas: number;
   wallet: {
     address: string;
-    network: "testnet";
+    network: "shelbynet";
     onChainBalanceOctas: number;
     lastSyncedAt?: string;
   };

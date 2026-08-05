@@ -32,7 +32,7 @@ export default function Home() {
 
         <div className="relative z-10 mx-auto max-w-3xl py-12 text-center md:py-20">
           <span className="mb-6 inline-block rounded-full border border-border bg-surface-high px-3 py-1 font-mono text-xs text-primary">
-            v2.0.4-aptos-testnet
+            v2.0.4-shelbynet
           </span>
           <h1 className="text-5xl font-bold leading-[1.08] tracking-tight text-white md:text-6xl">
             Secure storage.

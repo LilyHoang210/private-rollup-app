@@ -16,7 +16,7 @@ describe("auth API routes", () => {
           walletAddress: account.accountAddress.toStringLong(),
           domain: "localhost",
           uri: "http://localhost",
-          chainId: "aptos-testnet",
+          chainId: "aptos-shelbynet",
         }),
       }),
     );
@@ -24,7 +24,7 @@ describe("auth API routes", () => {
 
     expect(challengeResponse.status).toBe(200);
     expect(challenge.id).toEqual(expect.any(String));
-    expect(challenge.message).toContain("aptos-testnet");
+    expect(challenge.message).toContain("aptos-shelbynet");
 
     const verifyResponse = await verifyChallenge(
       new Request("http://localhost/api/auth/verify", {
@@ -43,7 +43,7 @@ describe("auth API routes", () => {
     const setCookie = verifyResponse.headers.get("set-cookie");
     expect(setCookie).toContain("HttpOnly");
     expect(await verifyResponse.json()).toMatchObject({
-      chainId: "aptos-testnet",
+      chainId: "aptos-shelbynet",
     });
 
     const sessionResponse = await getSession(
@@ -55,7 +55,7 @@ describe("auth API routes", () => {
     expect(sessionResponse.status).toBe(200);
     await expect(sessionResponse.json()).resolves.toMatchObject({
       authenticated: true,
-      chainId: "aptos-testnet",
+      chainId: "aptos-shelbynet",
       walletAddressHash: expect.any(String),
     });
   });

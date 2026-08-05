@@ -2,7 +2,7 @@ export interface WalletChallengeInput {
   walletAddress: string;
   domain: string;
   uri: string;
-  chainId: "aptos-testnet";
+  chainId: "aptos-shelbynet";
 }
 
 export interface WalletVerifyInput {
