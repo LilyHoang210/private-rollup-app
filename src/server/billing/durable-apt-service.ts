@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { desc, eq, sql } from "drizzle-orm";
+import { DIRECT_WITHDRAWAL_GAS_BUFFER_OCTAS } from "@/domain/apt";
 import { DomainError } from "@/domain/errors";
 import { getDatabase } from "@/server/db/client";
 import { aptAccounts, aptLedger, custodialWallets } from "@/server/db/schema";
@@ -11,7 +12,7 @@ import {
 import {
   generateCustodialWallet,
   getTestnetAptBalance,
-  sponsoredAptWithdrawal,
+  submitCustodialAptWithdrawal,
 } from "./aptos-wallet";
 import type { AptAccount } from "./apt-account-service";
 
@@ -145,9 +146,15 @@ export async function withdrawDurableApt(input: {
     if (availableOctas < input.amountOctas) {
       throw new DomainError("Insufficient available APT", "APT_INSUFFICIENT");
     }
-    if (freshWallet.lastObservedBalanceOctas < input.amountOctas) {
+    if (availableOctas < input.amountOctas + DIRECT_WITHDRAWAL_GAS_BUFFER_OCTAS) {
       throw new DomainError(
-        "The on-chain APT balance is lower than the requested withdrawal",
+        "Leave at least 0.006 APT in the service wallet for Aptos network gas.",
+        "APT_WITHDRAWAL_GAS_BUFFER_REQUIRED",
+      );
+    }
+    if (freshWallet.lastObservedBalanceOctas < input.amountOctas + DIRECT_WITHDRAWAL_GAS_BUFFER_OCTAS) {
+      throw new DomainError(
+        "The on-chain APT balance is lower than the requested withdrawal plus gas buffer",
         "APT_ONCHAIN_BALANCE_INSUFFICIENT",
       );
     }
@@ -157,15 +164,16 @@ export async function withdrawDurableApt(input: {
       userId: freshWallet.userId,
       address: freshWallet.address,
     });
-    const withdrawal = await sponsoredAptWithdrawal({
+    const withdrawal = await submitCustodialAptWithdrawal({
       custodialPrivateKey,
       destination: input.destination,
       amountOctas: input.amountOctas,
     });
+    const totalDebitOctas = input.amountOctas + withdrawal.gasFeeOctas;
     await tx
       .update(aptAccounts)
       .set({
-        balanceOctas: account.balanceOctas - input.amountOctas,
+        balanceOctas: account.balanceOctas - totalDebitOctas,
         updatedAt: new Date(),
       })
       .where(eq(aptAccounts.userId, wallet.userId));
@@ -173,7 +181,7 @@ export async function withdrawDurableApt(input: {
       .update(custodialWallets)
       .set({
         lastObservedBalanceOctas:
-          freshWallet.lastObservedBalanceOctas - input.amountOctas,
+          freshWallet.lastObservedBalanceOctas - totalDebitOctas,
         lastSyncedAt: new Date(),
         updatedAt: new Date(),
       })
@@ -181,7 +189,7 @@ export async function withdrawDurableApt(input: {
     await tx.insert(aptLedger).values({
       userId: wallet.userId,
       type: "withdrawal",
-      amountOctas: -input.amountOctas,
+      amountOctas: -totalDebitOctas,
       reservedDeltaOctas: 0,
       transactionHash: withdrawal.transactionHash,
       idempotencyKey: `withdrawal:${input.idempotencyKey}`,

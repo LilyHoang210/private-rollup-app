@@ -12,7 +12,7 @@ import {
   ShieldCheck,
   WalletCards,
 } from "lucide-react";
-import { parseAptToOctas } from "@/domain/apt";
+import { DIRECT_WITHDRAWAL_GAS_BUFFER_OCTAS, parseAptToOctas } from "@/domain/apt";
 import {
   useWallet,
   type AptosSignAndSubmitTransactionOutput,
@@ -263,7 +263,8 @@ export function AptBalancePanel() {
             <p className="mt-1 text-xs leading-relaxed text-muted">
               You may withdraw any available amount at any time. APT reserved for an
               open pack unlocks when that pack settles or the upload is cancelled.
-              The service sponsors withdrawal gas, so the requested amount is not reduced by gas.
+              Aptos network gas is paid from this service wallet, so keep a small
+              gas buffer when withdrawing.
             </p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
               <label className="min-w-0 flex-1">
@@ -278,8 +279,8 @@ export function AptBalancePanel() {
               </label>
               <button
                 type="button"
-                onClick={() => setAmount(octasToInput(state.account.availableOctas))}
-                disabled={state.account.availableOctas === 0 || busy !== null}
+                onClick={() => setAmount(octasToInput(maxDirectWithdrawalOctas(state.account.availableOctas)))}
+                disabled={maxDirectWithdrawalOctas(state.account.availableOctas) === 0 || busy !== null}
                 className="min-h-11 rounded border border-border bg-surface px-3 text-sm font-semibold text-foreground hover:border-primary disabled:opacity-50"
               >
                 Use maximum
@@ -400,6 +401,10 @@ export function userFacingErrorMessage(error: unknown, fallback = "Request faile
 
 function octasToInput(octas: number) {
   return (octas / 100_000_000).toFixed(8).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function maxDirectWithdrawalOctas(availableOctas: number) {
+  return Math.max(0, availableOctas - DIRECT_WITHDRAWAL_GAS_BUFFER_OCTAS);
 }
 
 function shortHash(value: string) {

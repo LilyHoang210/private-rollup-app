@@ -3,6 +3,7 @@ import { parseRetentionCohort } from "./files";
 import { DomainError } from "./errors";
 
 export const OCTAS_PER_APT = 100_000_000;
+export const DIRECT_WITHDRAWAL_GAS_BUFFER_OCTAS = 600_000;
 const BASE_OCTAS_PER_KIB_30_DAYS = 500;
 
 export interface EstimateReserveInput {
