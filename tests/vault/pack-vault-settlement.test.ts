@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { settlePackWithVault } from "@/server/packs/worker";
+import {
+  calculatePackActualShelbyCostOctas,
+  settlePackWithVault,
+} from "@/server/packs/worker";
 
 describe("pack vault settlement", () => {
   it("settles successful pack members through the Payment Vault instead of local APT balances", async () => {
@@ -36,5 +39,15 @@ describe("pack vault settlement", () => {
         { transactionHash: "0xsettled-b" },
       ],
     });
+  });
+
+  it("uses Shelby upload fee plus storage fee as actual Shelby cost", () => {
+    expect(
+      calculatePackActualShelbyCostOctas({
+        ciphertextBytes: 1_024,
+        retentionDays: 90,
+        mode: "shared_pack",
+      }),
+    ).toBe(4_192);
   });
 });

@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { PaymentVaultClient } from "@/server/vault/payment-vault-client";
+import { describe, expect, it, vi } from "vitest";
+import {
+  createConfiguredPaymentVaultSettlementClient,
+  PaymentVaultClient,
+} from "@/server/vault/payment-vault-client";
 
 describe("PaymentVaultClient", () => {
   it("builds upload_with_payment payload against the configured vault", () => {
@@ -38,5 +41,64 @@ describe("PaymentVaultClient", () => {
     expect(data.functionArguments).toEqual(
       expect.arrayContaining([4_000, 196_608, 10_031, 42_128]),
     );
+  });
+
+  it("marks upload success by submitting an operator transaction to the configured vault", async () => {
+    const transaction = { raw: "tx" };
+    const aptosClient = {
+      transaction: {
+        build: {
+          simple: vi.fn().mockResolvedValue(transaction),
+        },
+      },
+      signAndSubmitTransaction: vi.fn().mockResolvedValue({ hash: "0xsettled" }),
+      waitForTransaction: vi.fn().mockResolvedValue({ success: true }),
+    };
+    const operator = {
+      accountAddress: "0xoperator",
+    };
+    const client = new PaymentVaultClient(
+      {
+        contractAddress: "0x42",
+        network: "shelbynet",
+        operatorPrivateKey: "0xprivate",
+      },
+      {
+        aptosClient: aptosClient as never,
+        accountFromPrivateKey: vi.fn().mockReturnValue(operator),
+      },
+    );
+
+    await expect(
+      client.markUploadSuccess({
+        requestId: "req_123",
+        actualShelbyCostOctas: 12_345,
+      }),
+    ).resolves.toEqual({ transactionHash: "0xsettled", success: true });
+
+    expect(aptosClient.transaction.build.simple).toHaveBeenCalledWith({
+      sender: operator.accountAddress,
+      data: {
+        function: "0x42::payment_vault::mark_upload_success",
+        functionArguments: [new TextEncoder().encode("req_123"), 12_345],
+      },
+    });
+    expect(aptosClient.signAndSubmitTransaction).toHaveBeenCalledWith({
+      signer: operator,
+      transaction,
+    });
+    expect(aptosClient.waitForTransaction).toHaveBeenCalledWith({
+      transactionHash: "0xsettled",
+      options: { checkSuccess: true },
+    });
+  });
+
+  it("creates the settlement client from Payment Vault environment variables", () => {
+    const client = createConfiguredPaymentVaultSettlementClient({
+      PAYMENT_VAULT_CONTRACT_ADDRESS: "0x42",
+      PAYMENT_VAULT_OPERATOR_PRIVATE_KEY: "0xprivate",
+    } as unknown as NodeJS.ProcessEnv);
+
+    expect(client).toBeInstanceOf(PaymentVaultClient);
   });
 });

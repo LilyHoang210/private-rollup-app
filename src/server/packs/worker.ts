@@ -3,7 +3,6 @@ import { del, get } from "@vercel/blob";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import {
   allocatePackCostOctasByBytes,
-  estimateReserveOctas,
 } from "@/domain/apt";
 import type { RetentionCohort } from "@/domain/files";
 import { getDatabase } from "@/server/db/client";
@@ -16,6 +15,9 @@ import {
   vaultUploadRequests,
 } from "@/server/db/schema";
 import { writeEncryptedPack } from "@/server/storage/shelby-writer";
+import { createConfiguredPaymentVaultSettlementClient } from "@/server/vault/payment-vault-client";
+import { quoteVaultUpload } from "@/server/vault/payment-vault-quote";
+import type { VaultUploadMode } from "@/server/vault/payment-vault-types";
 import { selectPackCandidates } from "./pack-selection";
 import { assembleSharedPack } from "./shared-pack";
 
@@ -178,9 +180,14 @@ export async function closeEligiblePack(input: {
       sha256: assembled.sha256,
       retentionDays,
     });
-    const totalCostOctas = estimateReserveOctas({
+    const packMode =
+      selectedBatches.length === 1 && selected[0].dedicated
+        ? "dedicated_blob"
+        : "shared_pack";
+    const totalCostOctas = calculatePackActualShelbyCostOctas({
       ciphertextBytes: assembled.bytes.byteLength,
       retentionDays,
+      mode: packMode,
     });
     const allocations = allocatePackCostOctasByBytes({
       totalCostOctas,
@@ -190,7 +197,7 @@ export async function closeEligiblePack(input: {
       })),
     });
     await settlePackWithVault({
-      vault: input.vault ?? unconfiguredVaultSettlementClient(),
+      vault: input.vault ?? createConfiguredPaymentVaultSettlementClient(),
       packId,
       totalCostOctas,
       members: assembled.members.map((member) => {
@@ -208,9 +215,7 @@ export async function closeEligiblePack(input: {
     await db.transaction(async (tx) => {
       await tx.insert(packs).values({
         id: packId,
-        strategy: selectedBatches.length === 1 && selected[0].dedicated
-          ? "dedicated_blob"
-          : "shared_pack",
+        strategy: packMode,
         retentionDays: String(retentionDays) as "30" | "90" | "365",
         status: "verified",
         blobId: storage.blobId,
@@ -284,12 +289,17 @@ export async function closeEligiblePack(input: {
   }
 }
 
-function unconfiguredVaultSettlementClient(): VaultSettlementClient {
-  return {
-    async markUploadSuccess() {
-      throw new Error("Payment Vault settlement client is not configured");
-    },
-  };
+export function calculatePackActualShelbyCostOctas(input: {
+  ciphertextBytes: number;
+  retentionDays: RetentionCohort;
+  mode: VaultUploadMode;
+}) {
+  const quote = quoteVaultUpload({
+    encryptedSizeBytes: input.ciphertextBytes,
+    retentionDays: String(input.retentionDays) as "30" | "90" | "365",
+    mode: input.mode,
+  });
+  return quote.estimatedShelbyFeeOctas + quote.estimatedStorageFeeOctas;
 }
 
 async function readStagedPack(url: string, expectedSha256: string) {
