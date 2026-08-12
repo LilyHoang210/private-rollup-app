@@ -58,6 +58,42 @@ describe("packs page", () => {
     expect(screen.getByText("0.00025 APT")).toBeVisible();
   });
 
+  it("keeps shared pack strategy visible after Shelby verification", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+      Response.json(
+        String(input).includes("/api/packs/pool")
+          ? { pools: [poolFixture(90, 0, 0)] }
+          : {
+              batches: [
+                {
+                  ...batchFixture("verified-shared", "Verified shared upload", 874),
+                  status: "available",
+                  storage: {
+                    driver: "shelby",
+                    network: "shelbynet",
+                    verified: true,
+                    ownerAddress: `0x${"b".repeat(64)}`,
+                    blobId: "80983090967285760",
+                    blobName: "private-rollup/pack-verified-shared.prp",
+                    blobSizeBytes: 874,
+                    ciphertextSha256: "a".repeat(64),
+                    expiresAt: "2026-11-10T11:17:52.309Z",
+                    downloadUrl: "https://api.shelbynet.shelby.xyz/shelby/v1/blobs/owner/blob",
+                  },
+                },
+              ],
+            },
+      ),
+    );
+
+    render(<PacksPage />);
+
+    expect(await screen.findByText("Verified shared upload")).toBeVisible();
+    expect(screen.getByText("Available")).toBeVisible();
+    expect(screen.getByText("Shared pack")).toBeVisible();
+    expect(screen.queryByText("Dedicated encrypted pack")).not.toBeInTheDocument();
+  });
+
   it("shows waiting pack pool conditions and progress", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
       Response.json(

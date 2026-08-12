@@ -173,11 +173,7 @@ export function PacksUploadActivity() {
               <PackFact label="Status" value={statusLabel(batch.status)} />
               <PackFact
                 label="Strategy"
-                value={
-                  batch.storage
-                    ? "Dedicated encrypted pack"
-                    : strategyLabel(batch.items[0]?.packStrategy)
-                }
+                value={strategyLabel(batch.items[0]?.packStrategy)}
               />
               <PackFact label="Retention" value={`${batch.retentionDays} days`} />
               <PackFact label="Cost share" value={billingLabel(batch)} />
