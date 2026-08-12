@@ -153,6 +153,8 @@ describe("app shell", () => {
     );
     expect(screen.queryByText("0x12aF...9c4B")).not.toBeInTheDocument();
     expect(screen.getByText("0x1234...cdef")).toBeVisible();
+    expect(screen.getAllByText("Shelbynet")).toHaveLength(2);
+    expect(screen.queryByText("Aptos Testnet")).not.toBeInTheDocument();
   });
 
   it("falls back gracefully while the wallet adapter restores account state", () => {
@@ -307,7 +309,7 @@ describe("app shell", () => {
 
     const settingsDialog = screen.getByRole("dialog", { name: "Workspace settings" });
     expect(settingsDialog).toBeVisible();
-    expect(within(settingsDialog).getByText("Aptos Testnet")).toBeVisible();
+    expect(within(settingsDialog).getByText("Shelbynet")).toBeVisible();
   });
 
   it("lets disconnected users connect from the header wallet button", async () => {

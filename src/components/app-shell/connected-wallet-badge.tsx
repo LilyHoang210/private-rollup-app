@@ -9,6 +9,7 @@ import {
   getPaymentVaultStatus,
   type PaymentVaultStatusResponse,
 } from "@/client/api/payment-vault";
+import { NETWORK_DISPLAY_NAME } from "@/config/network-copy";
 import { SHELBY_EXPLORER_NETWORK_PARAM } from "@/config/shelbynet";
 import {
   authenticateConnectedWallet,
@@ -368,7 +369,7 @@ function WalletDetailsDialog({
           <dl className="mt-4 space-y-4">
             <DetailRow label="Wallet" value={walletName ?? "Aptos wallet"} />
             <DetailRow label="Address" value={address ?? "Wallet adapter is restoring address"} />
-            <DetailRow label="Network" value="Aptos Testnet" />
+            <DetailRow label="Network" value={NETWORK_DISPLAY_NAME} />
           </dl>
         </section>
 

@@ -10,6 +10,7 @@ import {
   Sparkles,
   Upload,
 } from "lucide-react";
+import { NETWORK_DISPLAY_NAME } from "../../config/network-copy";
 import { HeaderActions } from "./header-actions";
 
 const navItems = [
@@ -43,7 +44,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </div>
               <div>
                 <p className="text-2xl font-bold text-foreground">Private Rollup</p>
-                <p className="font-mono text-xs text-muted">Aptos Testnet</p>
+                <p className="font-mono text-xs text-muted">{NETWORK_DISPLAY_NAME}</p>
               </div>
             </div>
             <Link
@@ -92,7 +93,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <header className="flex min-h-11 items-center justify-between border-b border-border bg-background px-6 text-primary">
             <div className="hidden items-center gap-2 rounded-full border border-border bg-surface-low px-3 py-1 md:flex">
               <span className="h-2 w-2 rounded-full bg-accent" />
-              <span className="font-mono text-xs text-foreground">Aptos Testnet</span>
+              <span className="font-mono text-xs text-foreground">{NETWORK_DISPLAY_NAME}</span>
             </div>
             <div className="flex items-center gap-3 md:hidden">
               <Shield aria-hidden className="h-5 w-5 text-primary" />

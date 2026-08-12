@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { Bell, Settings } from "lucide-react";
+import { NETWORK_DISPLAY_NAME } from "../../config/network-copy";
 import { ConnectedWalletBadge } from "./connected-wallet-badge";
 
 type OpenDialog = "notifications" | "settings" | null;
@@ -51,7 +52,7 @@ export function HeaderActions() {
           onClose={() => setOpenDialog(null)}
         >
           <dl className="space-y-3 text-sm">
-            <SettingRow label="Network" value="Aptos Testnet" />
+            <SettingRow label="Network" value={NETWORK_DISPLAY_NAME} />
             <SettingRow label="Privacy mode" value="Client-side encryption" />
             <SettingRow label="Recovery" value="Local CLI only" />
           </dl>
