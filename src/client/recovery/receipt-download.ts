@@ -27,7 +27,12 @@ export function downloadBatchReceipt(batch: UploadApiBatchResponse) {
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = `${batch.id}.receipt.json`;
+  anchor.style.display = "none";
+  document.body.append(anchor);
   anchor.click();
-  globalThis.URL.revokeObjectURL?.(url);
+  anchor.remove();
+  globalThis.setTimeout(() => {
+    globalThis.URL.revokeObjectURL?.(url);
+  }, 0);
   return true;
 }
