@@ -12,6 +12,7 @@ import {
 } from "../../src/server/billing/apt-account-service";
 
 describe("upload service", () => {
+  const validReservationTransactionHash = `0x${"12".repeat(32)}`;
   const baseItem = {
     localId: "file-1",
     label: "Tax documents",
@@ -26,7 +27,7 @@ describe("upload service", () => {
   const vaultReservation = (vaultRequestId: string) => ({
     userAddress: "0xabc" as const,
     vaultRequestId,
-    reservationTransactionHash: "0x1234",
+    reservationTransactionHash: validReservationTransactionHash,
     reservationDeadlineSecs: 1_800_000_000,
   });
 
@@ -96,7 +97,7 @@ describe("upload service", () => {
 
     expect(created.vault).toEqual({
       requestId: "vault-visible-1",
-      transactionHash: "0x1234",
+      transactionHash: validReservationTransactionHash,
       userAddress: "0xabc",
       deadlineAt: "2027-01-15T08:00:00.000Z",
     });
@@ -120,7 +121,7 @@ describe("upload service", () => {
         userId: "demo-user",
         userAddress: "0xabc",
         vaultRequestId: "",
-        reservationTransactionHash: "0x1234",
+        reservationTransactionHash: validReservationTransactionHash,
         reservationDeadlineSecs: 1_800_000_000,
         idempotencyKey: "idem-insufficient-apt",
         retentionDays: 365,

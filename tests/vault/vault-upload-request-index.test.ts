@@ -2,13 +2,15 @@ import { describe, expect, it } from "vitest";
 import { buildVaultUploadRequestIndexRecord } from "@/server/uploads/durable-service";
 
 describe("vault upload request index", () => {
+  const validReservationTransactionHash = `0x${"12".repeat(32)}`;
+
   it("builds the durable index row from the signed vault reservation", () => {
     const record = buildVaultUploadRequestIndexRecord({
       userId: "11111111-1111-4111-8111-111111111111",
       uploadBatchId: "22222222-2222-4222-8222-222222222222",
       userAddress: "0xabc",
       vaultRequestId: "vault-index-1",
-      reservationTransactionHash: "0x1234",
+      reservationTransactionHash: validReservationTransactionHash,
       reservationDeadlineSecs: 1_800_000_000,
       retentionDays: "90",
       encryptedSizeBytes: 1_048_576,
@@ -30,7 +32,7 @@ describe("vault upload request index", () => {
       platformFeeOctas: 10_031,
       safetyBufferOctas: 42_128,
       totalLockedOctas: 252_767,
-      transactionHash: "0x1234",
+      transactionHash: validReservationTransactionHash,
     });
     expect(record.deadlineAt).toEqual(new Date("2027-01-15T08:00:00.000Z"));
   });

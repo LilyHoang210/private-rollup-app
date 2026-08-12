@@ -9,7 +9,7 @@ describe("Payment Vault reservation verification", () => {
     userId: "wallet:user",
     userAddress: "0xabc" as const,
     vaultRequestId: "vault-request-1",
-    reservationTransactionHash: "0x1234",
+    reservationTransactionHash: `0x${"12".repeat(32)}`,
     reservationDeadlineSecs: 1_800_000_000,
     expectedEncryptedBytes: 1_024,
     expectedRetentionDays: "90" as const,
@@ -121,6 +121,31 @@ describe("Payment Vault reservation verification", () => {
         aptosClient: { getTransactionByHash },
       }),
     ).rejects.toThrow("Payment Vault reservation sender does not match the connected wallet");
+  });
+
+  it("rejects malformed transaction hashes before calling the fullnode", async () => {
+    const getTransactionByHash = vi.fn();
+
+    await expect(
+      verifyVaultReservationTransaction(
+        { ...baseInput, reservationTransactionHash: "0xabc123" },
+        { aptosClient: { getTransactionByHash } },
+      ),
+    ).rejects.toThrow("Payment Vault reservation transaction is invalid");
+
+    expect(getTransactionByHash).not.toHaveBeenCalled();
+  });
+
+  it("maps fullnode lookup failures to an unavailable reservation transaction", async () => {
+    const getTransactionByHash = vi
+      .fn()
+      .mockRejectedValue(new Error("transaction not found"));
+
+    await expect(
+      verifyVaultReservationTransaction(baseInput, {
+        aptosClient: { getTransactionByHash },
+      }),
+    ).rejects.toThrow("Payment Vault reservation transaction is unavailable");
   });
 
   it("keeps the local shape validation available for non-durable tests", () => {

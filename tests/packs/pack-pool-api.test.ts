@@ -3,6 +3,8 @@ import { GET as getPackPools } from "../../src/app/api/packs/pool/route";
 import { recordWalletDeposit, resetAptStoreForTests } from "../../src/server/billing/apt-account-service";
 import { completeUploadBatch, createUploadBatch, resetUploadStoreForTests } from "../../src/server/uploads/service";
 
+const validReservationTransactionHash = `0x${"12".repeat(32)}`;
+
 describe("pack pool API", () => {
   afterEach(() => {
     resetUploadStoreForTests();
@@ -77,7 +79,7 @@ function queueSharedUpload(input: {
     userId: input.userId,
     userAddress: "0xabc",
     vaultRequestId: `vault-${input.idempotencyKey}`,
-    reservationTransactionHash: "0x1234",
+    reservationTransactionHash: validReservationTransactionHash,
     reservationDeadlineSecs: 1_800_000_000,
     idempotencyKey: input.idempotencyKey,
     retentionDays: 90,

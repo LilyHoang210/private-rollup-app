@@ -33,7 +33,7 @@ export function assertVaultReservationReady(input: VaultReservationInput) {
       "VAULT_RESERVATION_REQUIRED",
     );
   }
-  if (!/^0x[a-fA-F0-9]+$/.test(input.reservationTransactionHash)) {
+  if (!/^0x[a-fA-F0-9]{64}$/.test(input.reservationTransactionHash)) {
     throw new DomainError(
       "Payment Vault reservation transaction is invalid",
       "VAULT_RESERVATION_TX_INVALID",
@@ -64,9 +64,10 @@ export async function verifyVaultReservationTransaction(
   dependencies: { aptosClient?: TransactionVerifierClient } = {},
 ) {
   assertVaultReservationReady(input);
-  const tx = await (dependencies.aptosClient ?? aptos).getTransactionByHash({
-    transactionHash: input.reservationTransactionHash,
-  });
+  const tx = await lookupReservationTransaction(
+    dependencies.aptosClient ?? aptos,
+    input.reservationTransactionHash,
+  );
   const transaction = parseUserTransaction(tx);
   if (!transaction.success) {
     throw new DomainError(
@@ -118,6 +119,20 @@ export async function verifyVaultReservationTransaction(
     throw new DomainError(
       "Payment Vault reservation retention does not match upload metadata",
       "VAULT_RESERVATION_RETENTION_MISMATCH",
+    );
+  }
+}
+
+async function lookupReservationTransaction(
+  client: TransactionVerifierClient,
+  transactionHash: string,
+) {
+  try {
+    return await client.getTransactionByHash({ transactionHash });
+  } catch {
+    throw new DomainError(
+      "Payment Vault reservation transaction is unavailable",
+      "VAULT_RESERVATION_TX_UNAVAILABLE",
     );
   }
 }

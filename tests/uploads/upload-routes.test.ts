@@ -9,6 +9,8 @@ import {
 import { resetUploadStoreForTests } from "../../src/server/uploads/service";
 
 describe("upload API routes", () => {
+  const validReservationTransactionHash = `0x${"12".repeat(32)}`;
+
   afterEach(() => {
     resetUploadStoreForTests();
   });
@@ -22,7 +24,7 @@ describe("upload API routes", () => {
           idempotencyKey: "route-idem-1",
           userAddress: "0xabc",
           vaultRequestId: "vault-route-1",
-          reservationTransactionHash: "0x1234",
+          reservationTransactionHash: validReservationTransactionHash,
           reservationDeadlineSecs: 1_800_000_000,
           retentionDays: 90,
           items: [
@@ -107,7 +109,7 @@ describe("upload API routes", () => {
           idempotencyKey: "route-idem-plaintext",
           userAddress: "0xabc",
           vaultRequestId: "vault-route-plaintext",
-          reservationTransactionHash: "0x1234",
+          reservationTransactionHash: validReservationTransactionHash,
           reservationDeadlineSecs: 1_800_000_000,
           retentionDays: 90,
           items: [
