@@ -42,10 +42,33 @@ async function postJson<TResponse>(
   });
 
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
+    throw new Error(await responseErrorMessage(response));
   }
 
   return (await response.json()) as TResponse;
+}
+
+async function responseErrorMessage(response: Response) {
+  try {
+    const payload = (await response.json()) as {
+      error?: unknown;
+      message?: unknown;
+    };
+    const serverMessage =
+      typeof payload.error === "string" && payload.error.trim()
+        ? payload.error
+        : typeof payload.message === "string" && payload.message.trim()
+          ? payload.message
+          : undefined;
+
+    if (serverMessage) {
+      return serverMessage;
+    }
+  } catch {
+    // Fall through to a status-based message when the server did not return JSON.
+  }
+
+  return `Request failed: ${response.status}`;
 }
 
 export async function createWalletChallenge(

@@ -67,4 +67,27 @@ describe("auth client API", () => {
     expect(result.chainId).toBe("aptos-shelbynet");
     expect(calls).toEqual(["/api/auth/verify"]);
   });
+
+  it("surfaces server error messages for failed wallet verification", async () => {
+    const fetcher = async () =>
+      Response.json(
+        { error: "CUSTODIAL_WALLET_MASTER_KEY must be 32 base64-encoded bytes" },
+        { status: 401 },
+      );
+
+    await expect(
+      verifyWalletChallenge(
+        {
+          challengeId: "challenge-id",
+          walletAddress: "0xabc",
+          publicKey: "0xpublic",
+          domain: "localhost",
+          signature: "0xsig",
+        },
+        fetcher,
+      ),
+    ).rejects.toThrow(
+      "CUSTODIAL_WALLET_MASTER_KEY must be 32 base64-encoded bytes",
+    );
+  });
 });
