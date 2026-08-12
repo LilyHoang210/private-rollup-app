@@ -80,6 +80,13 @@ describe("upload panel", () => {
       (call) => call[0] === "/api/uploads",
     );
     expect(uploadCall?.[1]).toMatchObject({ method: "POST" });
+    const uploadBody = JSON.parse(String(uploadCall?.[1]?.body)) as {
+      encryptedSizeBytes: number;
+      items: Array<{ ciphertextSizeBytes: number }>;
+    };
+    expect(uploadBody.encryptedSizeBytes).toBeGreaterThan(
+      uploadBody.items.reduce((total, item) => total + item.ciphertextSizeBytes, 0),
+    );
     expect(String(uploadCall?.[1]?.body)).not.toContain("super secret plaintext");
     expect(String(uploadCall?.[1]?.body)).not.toContain("Personal docs");
     expect(String(uploadCall?.[1]?.body)).not.toContain("packBytesBase64");

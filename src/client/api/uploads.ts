@@ -89,6 +89,7 @@ export interface CreateUploadBatchRequest {
   vaultRequestId: string;
   reservationTransactionHash: string;
   reservationDeadlineSecs: number;
+  encryptedSizeBytes: number;
   retentionDays: RetentionCohort;
   items: UploadApiItemInput[];
 }

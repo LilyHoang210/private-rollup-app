@@ -252,6 +252,7 @@ export function UploadPanel() {
         vaultRequestId,
         reservationTransactionHash,
         reservationDeadlineSecs,
+        encryptedSizeBytes: encryptedPack.bytes.byteLength,
         retentionDays,
         items: apiItems,
       });

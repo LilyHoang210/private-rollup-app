@@ -50,13 +50,15 @@ export async function createDurableUploadBatch(
     (total, item) => total + item.ciphertextSizeBytes,
     0,
   );
+  const reservedEncryptedSizeBytes =
+    input.encryptedSizeBytes ?? totalCiphertextBytes;
   await verifyVaultReservationTransaction({
     userId: input.userId,
     userAddress: input.userAddress,
     vaultRequestId: input.vaultRequestId,
     reservationTransactionHash: input.reservationTransactionHash,
     reservationDeadlineSecs: input.reservationDeadlineSecs,
-    expectedEncryptedBytes: totalCiphertextBytes,
+    expectedEncryptedBytes: reservedEncryptedSizeBytes,
     expectedRetentionDays: String(retentionDays) as "30" | "90" | "365",
     contractAddress: readPaymentVaultContractAddress(),
   });
@@ -99,7 +101,7 @@ export async function createDurableUploadBatch(
         reservationTransactionHash: input.reservationTransactionHash,
         reservationDeadlineSecs: input.reservationDeadlineSecs,
         retentionDays: String(retentionDays) as "30" | "90" | "365",
-        encryptedSizeBytes: totalCiphertextBytes,
+        encryptedSizeBytes: reservedEncryptedSizeBytes,
         contractAddress: readPaymentVaultContractAddress(),
       }),
     );

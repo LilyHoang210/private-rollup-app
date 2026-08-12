@@ -36,6 +36,7 @@ export interface CreateUploadBatchInput {
   vaultRequestId: string;
   reservationTransactionHash: string;
   reservationDeadlineSecs: number;
+  encryptedSizeBytes?: number;
   items: CreateUploadItemInput[];
 }
 
@@ -130,6 +131,8 @@ export function createUploadBatch(input: CreateUploadBatchInput): UploadBatchRec
     (total, item) => total + item.ciphertextSizeBytes,
     0,
   );
+  const reservedEncryptedSizeBytes =
+    input.encryptedSizeBytes ?? totalCiphertextSizeBytes;
 
   assertVaultReservationReady({
     userId: input.userId,
@@ -137,7 +140,7 @@ export function createUploadBatch(input: CreateUploadBatchInput): UploadBatchRec
     vaultRequestId: input.vaultRequestId,
     reservationTransactionHash: input.reservationTransactionHash,
     reservationDeadlineSecs: input.reservationDeadlineSecs,
-    expectedEncryptedBytes: totalCiphertextSizeBytes,
+    expectedEncryptedBytes: reservedEncryptedSizeBytes,
     expectedRetentionDays: String(retentionDays) as "30" | "90" | "365",
   });
 
