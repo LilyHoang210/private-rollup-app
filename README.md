@@ -3,7 +3,7 @@
 Private Rollup is a working MVP for browser-encrypted uploads, shared Shelby
 blob packs, Payment Vault settlement, and local CLI recovery.
 
-Live app: <https://private-rollup-app.vercel.app>
+Live app: <https://private-rollup-app-lily-c9d2.vercel.app>
 
 Payment Vault contract on Shelbynet:
 
