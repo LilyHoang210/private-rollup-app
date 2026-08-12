@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Download, FolderUp, PackageCheck, ShieldCheck, UploadCloud } from "lucide-react";
+import { Download, FolderUp, KeyRound, PackageCheck, ShieldCheck, UploadCloud } from "lucide-react";
 import { useWallet } from "@aptos-labs/wallet-adapter-react";
 import { formatApt } from "@/domain/apt";
 import type { FileCategory, RetentionCohort } from "@/domain/files";
@@ -26,11 +26,17 @@ import {
 } from "@/client/uploads/encrypted-pack";
 import { encryptChunkedPayload } from "@/client/crypto/chunk-encrypt";
 import {
+  createRecoveryKit,
   importVaultPublicKey,
   wrapDekForVault,
   type WrappedDek,
 } from "@/client/crypto/hpke";
-import { readLocalVaultPublicMaterial } from "@/client/vault/local-vault";
+import {
+  downloadRecoveryKit,
+  readLocalVaultPublicMaterial,
+  saveLocalVaultPublicMaterial,
+  type LocalVaultPublicMaterial,
+} from "@/client/vault/local-vault";
 import { downloadBatchReceipt } from "@/client/recovery/receipt-download";
 import type { VaultUploadQuote } from "@/server/vault/payment-vault-types";
 
@@ -63,6 +69,12 @@ type VaultQuoteState =
   | { kind: "ready"; quote: VaultUploadQuote; contractAddress: `0x${string}` }
   | { kind: "failed" };
 
+type VaultSetupState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "ready"; ownerFingerprint: string }
+  | { kind: "failed"; message: string };
+
 export function UploadPanel() {
   const { account, connected, signAndSubmitTransaction } = useWallet();
   const [files, setFiles] = useState<File[]>([]);
@@ -82,7 +94,12 @@ export function UploadPanel() {
     kind: "loading",
   });
   const [isClosingPack, setIsClosingPack] = useState(false);
-  const [vaultMaterial] = useState(() => readLocalVaultPublicMaterial());
+  const [vaultMaterial, setVaultMaterial] = useState<
+    LocalVaultPublicMaterial | undefined
+  >(() => readLocalVaultPublicMaterial());
+  const [vaultSetupState, setVaultSetupState] = useState<VaultSetupState>({
+    kind: "idle",
+  });
 
   const selectedSize = useMemo(
     () => files.reduce((total, file) => total + file.size, 0),
@@ -273,6 +290,56 @@ export function UploadPanel() {
     }
   }
 
+  async function initializeVaultFromUpload() {
+    setVaultSetupState({ kind: "loading" });
+
+    try {
+      const recoveryKit = await createRecoveryKit();
+      const response = await fetch("/api/vault", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          publicKeyBytes: recoveryKit.publicKey,
+          algorithm: "DHKEM_X25519_HKDF_SHA256",
+        }),
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error("Connect your wallet before initializing the vault.");
+        }
+        throw new Error("Vault registration failed. Check your connection and try again.");
+      }
+
+      const body = (await response.json()) as { ownerFingerprint: string };
+      const kitWithOwner = {
+        ...recoveryKit,
+        ownerFingerprint: body.ownerFingerprint,
+      };
+      saveLocalVaultPublicMaterial(kitWithOwner);
+      setVaultMaterial({
+        algorithm: kitWithOwner.algorithm,
+        publicKey: kitWithOwner.publicKey,
+        ownerFingerprint: kitWithOwner.ownerFingerprint,
+        createdAt: kitWithOwner.createdAt,
+      });
+      downloadRecoveryKit(kitWithOwner);
+      setVaultSetupState({
+        kind: "ready",
+        ownerFingerprint: body.ownerFingerprint,
+      });
+      setState({ kind: "idle" });
+    } catch (error) {
+      setVaultSetupState({
+        kind: "failed",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Vault registration failed. Check your connection and try again.",
+      });
+    }
+  }
+
   async function sealPackNow(batch: UploadApiBatchResponse) {
     setIsClosingPack(true);
     try {
@@ -321,6 +388,13 @@ export function UploadPanel() {
       </div>
 
       <StorageReadinessBanner status={storageStatus} />
+
+      {!vaultMaterial || vaultSetupState.kind !== "idle" ? (
+        <VaultInlineSetup
+          state={vaultSetupState}
+          onInitialize={() => void initializeVaultFromUpload()}
+        />
+      ) : null}
 
       {files.length > 0 ? (
         <section className="mt-5 rounded-xl border border-primary/35 bg-background p-4">
@@ -774,6 +848,63 @@ function StorageReadinessBanner({ status }: { status: StorageStatus }) {
       Uploads are reported as successful only after the blob is committed and
       verified against on-chain metadata.
     </div>
+  );
+}
+
+function VaultInlineSetup({
+  state,
+  onInitialize,
+}: {
+  state: VaultSetupState;
+  onInitialize: () => void;
+}) {
+  return (
+    <section className="mt-5 rounded-xl border border-primary/35 bg-background p-4">
+      <div className="flex items-start gap-4">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border bg-surface-high text-primary">
+          <KeyRound aria-hidden className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-lg font-semibold text-foreground">
+            Create your encryption vault
+          </h3>
+          <p className="mt-2 text-sm leading-relaxed text-muted">
+            Uploads need a vault public key so each file key can be wrapped before
+            it leaves the browser. The server receives only public key material;
+            your private recovery key is downloaded as recovery-kit.json and
+            should be stored offline.
+          </p>
+          <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center">
+            <button
+              type="button"
+              onClick={onInitialize}
+              disabled={state.kind === "loading"}
+              className="inline-flex min-h-11 items-center justify-center rounded bg-primary px-4 py-2 text-sm font-semibold text-[#133155] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {state.kind === "loading" ? "Creating recovery kit..." : "Initialize Vault"}
+            </button>
+            <p className="text-xs leading-relaxed text-muted">
+              After the download starts, keep recovery-kit.json private. Support
+              will never ask for it.
+            </p>
+          </div>
+          <div aria-live="polite" className="mt-3 text-sm">
+            {state.kind === "ready" ? (
+              <p className="text-foreground">
+                Recovery kit downloaded. Vault fingerprint{" "}
+                <span className="font-mono text-primary">
+                  {state.ownerFingerprint.slice(0, 12)}...
+                </span>
+                . You can continue the upload.
+              </p>
+            ) : null}
+            {state.kind === "failed" ? (
+              <p className="text-error">{state.message}</p>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 

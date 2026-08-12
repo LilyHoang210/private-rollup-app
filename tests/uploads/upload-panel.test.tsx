@@ -159,6 +159,50 @@ describe("upload panel", () => {
     expect(fetchMock.mock.calls.some((call) => call[0] === "/api/uploads")).toBe(false);
   });
 
+  it("lets users initialize a missing vault from the upload flow and continue upload", async () => {
+    localStorage.clear();
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input, init) => {
+        const url = String(input);
+        if (url.includes("/api/storage/status")) {
+          return Response.json(storageReadyFixture());
+        }
+        if (url.includes("/api/payment-vault/quote")) {
+          return Response.json(vaultQuoteFixture());
+        }
+        if (url === "/api/vault" && init?.method === "POST") {
+          return Response.json({ ownerFingerprint: "owner-fingerprint-1" });
+        }
+        if (url === "/api/uploads" && init?.method === "POST") {
+          return Response.json(uploadFixture("staging"), { status: 201 });
+        }
+        if (url.includes("/api/uploads/batch-1/complete") && init?.method === "POST") {
+          return Response.json(uploadFixture("waiting_for_pack"));
+        }
+        return Response.json({ error: "NOT_FOUND" }, { status: 404 });
+      },
+    );
+
+    render(<UploadPanel />);
+    await userEvent.upload(
+      screen.getByLabelText("Select files"),
+      new File(["hello"], "hello.txt", { type: "text/plain" }),
+    );
+    await userEvent.click(await screen.findByRole("button", { name: "Pay and upload" }));
+
+    expect(
+      await screen.findByText("Initialize your vault and save recovery-kit.json before uploading."),
+    ).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Initialize Vault" }));
+    expect(await screen.findByText(/Recovery kit downloaded/i)).toBeVisible();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Pay and upload" }));
+
+    expect(await screen.findByText(/Encrypted upload queued/i)).toBeVisible();
+    expect(signAndSubmitTransactionMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls.some((call) => call[0] === "/api/vault")).toBe(true);
+  });
+
   it("blocks payment when the connected wallet is unavailable", async () => {
     walletHookMock.mockReturnValue({
       account: null,
