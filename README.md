@@ -8,7 +8,7 @@ Live app: <https://private-rollup-app.vercel.app>
 Payment Vault contract on Shelbynet:
 
 ```text
-0xcb3b32b0fbee384dbbcea2de3e01bed09c2cb7d4b50a04f9f3992a0e44028f86
+0xb0a727508f1824cb3943b3acaa911d0a37efa90ed76180be91b4065dbbb6b97a
 ```
 
 ## What it does
